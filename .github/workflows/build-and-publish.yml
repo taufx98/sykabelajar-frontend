@@ -1,0 +1,82 @@
+name: Build and publish frontend assets
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-main-assets
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build fingerprinted assets
+        run: node build/build.mjs
+
+      - name: Show generated release
+        run: |
+          echo "Generated assets:"
+          cat dist/manifest.json
+
+      - name: Commit generated dist assets
+        id: publish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No generated asset changes."
+            exit 0
+          fi
+          git commit -m "chore: publish frontend assets [skip ci]"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Purge jsDelivr loader cache
+        if: steps.publish.outputs.changed == 'true'
+        run: |
+          URL="https://purge.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
+          echo "Purging: $URL"
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error "$URL"; then
+              echo
+              echo "jsDelivr loader cache purge requested successfully."
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Purge attempt $attempt failed; retrying..."
+              sleep 5
+            else
+              echo "Purge failed after 3 attempts."
+              exit 1
+            fi
+          done
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Sykabelajar frontend publish"
+            echo
+            echo "- Source commit: \\`${GITHUB_SHA}\`"
+            echo "- CDN loader: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
+            echo "- Build output: \\`dist/*.<hash>.*\\`"
+            echo "- Theme requires only the stable loader URL."
+          } >> "$GITHUB_STEP_SUMMARY"

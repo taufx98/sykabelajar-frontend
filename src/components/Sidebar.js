@@ -1,0 +1,7 @@
+(function(){
+  function render(){
+    const auth=window.SYKA_STATE.getState().auth; const path=window.SYKA_UTILS.routePath(); const isAdmin=auth.roles.includes('admin'); const isOrganizer=auth.roles.includes('organizer_member');
+    const items=[['/','Beranda','⌂'],['/lomba','Lomba','◈'],['/juara','Juara','♛'],['/prestasi','Prestasi','✦']]; if(isOrganizer||isAdmin) items.push(['/organizer','Penyelenggara','▣']); if(isAdmin) items.push(['/admin','Admin','⚙']);
+    const el=document.getElementById('syka-sidebar'); el.innerHTML=`<div class="sidebar-top"><a class="brand" href="${window.SYKA_ROUTER.href('/') }" aria-label="Sykabelajar"><span class="brand-logo">S</span><div><strong>Sykabelajar.id</strong><small>Platform kompetensi</small></div></a><button id="sidebar-collapse" class="sidebar-collapse">‹</button></div><nav>${items.map(([href,label,icon])=>`<a class="side-item ${href===path?'active':''}" href="${window.SYKA_ROUTER.href(href)}"><span>${icon}</span><b>${label}</b></a>`).join('')}</nav><div class="sidebar-bottom"><button id="side-profile">${auth.user?'◎ Profil Saya':'◉ Masuk / Daftar'}</button><button id="side-theme">◐ Tema</button></div>`; document.getElementById('sidebar-collapse').onclick=()=>window.SYKA_APP.toggleSidebar(); document.getElementById('side-theme').onclick=()=>window.SYKA_APP.toggleTheme(); document.getElementById('side-profile').onclick=()=>auth.user?window.SYKA_ROUTER.navigate('/profile'):window.SYKA_APP.openAuth('login'); }
+  window.SYKA_SIDEBAR={render};
+})();
