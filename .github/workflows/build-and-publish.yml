@@ -2,7 +2,8 @@ name: Build and publish frontend assets
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -15,6 +16,7 @@ permissions:
 jobs:
   build-publish:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,57 +28,132 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci
+
       - name: Build fingerprinted assets
         run: node build/build.mjs
 
+      - name: Validate build output
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f dist/manifest.json
+          test -f dist/loader.js
+
+          node - <<'NODE'
+          const fs = require('fs');
+
+          const manifest = JSON.parse(
+            fs.readFileSync('dist/manifest.json', 'utf8')
+          );
+
+          for (const key of ['app', 'styles', 'vendor', 'loader']) {
+            if (!manifest[key]) {
+              throw new Error(`manifest.json missing "${key}"`);
+            }
+          }
+
+          for (const file of [
+            manifest.app,
+            manifest.styles,
+            manifest.vendor,
+            manifest.loader
+          ]) {
+            if (!fs.existsSync(`dist/${file}`)) {
+              throw new Error(`Generated file does not exist: dist/${file}`);
+            }
+          }
+
+          console.log('Manifest validation passed:');
+          console.log(JSON.stringify(manifest, null, 2));
+          NODE
+
       - name: Show generated release
+        shell: bash
         run: |
           echo "Generated assets:"
           cat dist/manifest.json
+          echo
+          ls -lah dist
 
       - name: Commit generated dist assets
         id: publish
+        shell: bash
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add dist
+
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No generated asset changes."
             exit 0
           fi
+
           git commit -m "chore: publish frontend assets [skip ci]"
           git push origin HEAD:main
+
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Purge jsDelivr loader cache
         if: steps.publish.outputs.changed == 'true'
+        continue-on-error: true
+        shell: bash
         run: |
+          set -u
+
           URL="https://purge.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
           echo "Purging: $URL"
+
           for attempt in 1 2 3; do
-            if curl --fail --silent --show-error "$URL"; then
+            if curl --fail --silent --show-error --location "$URL"; then
               echo
               echo "jsDelivr loader cache purge requested successfully."
-              break
+              exit 0
             fi
+
             if [ "$attempt" -lt 3 ]; then
-              echo "Purge attempt $attempt failed; retrying..."
+              echo "Purge attempt $attempt failed; retrying in 5 seconds..."
               sleep 5
             else
-              echo "Purge failed after 3 attempts."
-              exit 1
+              echo "::warning::jsDelivr purge failed after 3 attempts."
+              echo "The fingerprinted assets were already published, so deployment continues."
+              exit 0
             fi
           done
 
+      - name: Verify published manifest URL
+        if: steps.publish.outputs.changed == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          MANIFEST_URL="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/dist/manifest.json"
+          echo "Checking: $MANIFEST_URL"
+
+          if curl --fail --silent --show-error --location "$MANIFEST_URL" -o /tmp/manifest.json; then
+            echo "jsDelivr manifest is reachable."
+            cat /tmp/manifest.json
+          else
+            echo "::warning::Could not verify jsDelivr manifest immediately. CDN propagation may still be in progress."
+          fi
+
       - name: Job summary
         if: always()
+        shell: bash
         run: |
           {
             echo "## Sykabelajar frontend publish"
             echo
-            echo "- Source commit: \\`${GITHUB_SHA}\`"
+            echo "- Source commit: ${GITHUB_SHA}"
+            echo "- Repository: ${GITHUB_REPOSITORY}"
             echo "- CDN loader: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
-            echo "- Build output: \\`dist/*.<hash>.*\\`"
+            echo "- CDN manifest: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/dist/manifest.json"
+            echo "- Build output: dist/*.<hash>.*"
             echo "- Theme requires only the stable loader URL."
           } >> "$GITHUB_STEP_SUMMARY"
