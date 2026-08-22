@@ -3,10 +3,10 @@
   "version": "4.7.3",
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.85380d706844.min.js",
+  "app": "app.b1aaabd1d45a.min.js",
   "styles": "styles.69d2b869dfc7.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "f9a2cf7906ed5ed94f1f294ebcd9b2406c02420d",
-  "generatedAt": "2026-08-22T22:27:56+07:00"
+  "commit": "local-dev",
+  "generatedAt": "2026-08-22T15:32:36.745Z"
 }

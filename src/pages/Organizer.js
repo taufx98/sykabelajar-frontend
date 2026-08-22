@@ -273,7 +273,7 @@
       multiple_choice: {
         label:'Pilihan ganda',
         description:'Satu jawaban benar dari beberapa pilihan.',
-        short:'Pilih satu jawaban yang paling tepat.',
+        short:'Peserta hanya dapat memilih satu jawaban.',
         supportsOptions:true,
         optionMode:'single'
       },
@@ -287,7 +287,7 @@
       true_false: {
         label:'Benar / Salah',
         description:'Pernyataan dengan dua pilihan jawaban.',
-        short:'Sistem menyediakan Benar dan Salah otomatis.',
+        short:'Pilihan Benar dan Salah dibuat otomatis.',
         supportsOptions:true,
         optionMode:'single',
         fixed:true
@@ -295,12 +295,12 @@
       short_answer: {
         label:'Isian singkat',
         description:'Jawaban teks singkat dengan beberapa jawaban yang diterima.',
-        short:'Gunakan beberapa variasi jawaban bila diperlukan.',
+        short:'Sediakan variasi jawaban yang dianggap benar.',
         supportsOptions:false
       },
       essay: {
         label:'Essay',
-        description:'Jawaban panjang untuk dinilai manual oleh grader.',
+        description:'Jawaban panjang untuk dinilai manual.',
         short:'Tidak ada kunci otomatis; grader memberi skor dan feedback.',
         supportsOptions:false
       },
@@ -312,85 +312,130 @@
       }
     };
 
-    const escAttr = value => esc(value == null ? '' : value).replace(/`/g,'&#96;');
+    const cloneOptions = (rows) => (Array.isArray(rows) ? rows : []).map(o => ({
+      label: String(o?.label ?? ''),
+      value: String(o?.value ?? ''),
+      is_correct: !!o?.is_correct
+    }));
 
-    const draft = {
+    const makeDefaultOptions = (type) => {
+      if(type === 'true_false'){
+        return [
+          {label:'Benar', value:'true', is_correct:true},
+          {label:'Salah', value:'false', is_correct:false}
+        ];
+      }
+      if(type === 'multiple_checkbox'){
+        return [
+          {label:'A', value:'A', is_correct:false},
+          {label:'B', value:'B', is_correct:false},
+          {label:'C', value:'C', is_correct:false},
+          {label:'D', value:'D', is_correct:false}
+        ];
+      }
+      return [
+        {label:'A', value:'A', is_correct:true},
+        {label:'B', value:'B', is_correct:false},
+        {label:'C', value:'C', is_correct:false},
+        {label:'D', value:'D', is_correct:false}
+      ];
+    };
+
+    const baseDraft = {
       competition_id: initial.competition_id || '',
       type: initial.type || 'multiple_choice',
       prompt: initial.prompt || '',
       points: Number(initial.points ?? 1),
       display_order: Number(initial.display_order ?? 0),
-      required: initial.required !== false,
-      options: Array.isArray(initial.options) ? initial.options.map(o=>({
-        label:o.label || '', value:o.value || '', is_correct:!!o.is_correct
-      })) : [],
-      accepted_answers: Array.isArray(initial.config?.accepted_answers) ? [...initial.config.accepted_answers] : [],
-      rubric: initial.config?.rubric || '',
-      file_config: {
-        allowed_mime: initial.config?.allowed_mime || 'pdf',
-        max_size_mb: Number(initial.config?.max_size_mb || 10),
-        file_required: initial.config?.file_required !== false
+      required: initial.required !== false
+    };
+
+    const typeState = {
+      multiple_choice: {
+        options: cloneOptions(initial.type === 'multiple_choice' ? initial.options : [])
+      },
+      multiple_checkbox: {
+        options: cloneOptions(initial.type === 'multiple_checkbox' ? initial.options : [])
+      },
+      true_false: {
+        options: cloneOptions(initial.type === 'true_false' ? initial.options : [])
+      },
+      short_answer: {
+        accepted_answers: initial.type === 'short_answer' && Array.isArray(initial.config?.accepted_answers)
+          ? [...initial.config.accepted_answers]
+          : []
+      },
+      essay: {
+        rubric: initial.type === 'essay' ? String(initial.config?.rubric || '') : ''
+      },
+      file_upload: {
+        allowed_mime: initial.type === 'file_upload' ? (initial.config?.allowed_mime || 'pdf') : 'pdf',
+        max_size_mb: initial.type === 'file_upload' ? Number(initial.config?.max_size_mb || 10) : 10,
+        file_required: initial.type === 'file_upload' ? initial.config?.file_required !== false : true
       }
     };
 
-    function normalizeOptionsForType(type){
-      if(type==='true_false'){
-        const existingTruth = draft.options.find(o=>String(o.value)==='true');
-        const existingFalse = draft.options.find(o=>String(o.value)==='false');
-        draft.options = [
-          {label:'Benar',value:'true',is_correct: existingTruth ? !!existingTruth.is_correct : true},
-          {label:'Salah',value:'false',is_correct: existingFalse ? !!existingFalse.is_correct : false}
+    const escAttr = value => esc(value == null ? '' : value).replace(/`/g,'&#96;');
+
+    function ensureTypeState(type){
+      if(type === 'true_false'){
+        const current = typeState.true_false.options;
+        const truth = current.find(o => String(o.value).toLowerCase() === 'true');
+        const falsity = current.find(o => String(o.value).toLowerCase() === 'false');
+        typeState.true_false.options = [
+          {label:'Benar', value:'true', is_correct: truth ? !!truth.is_correct : true},
+          {label:'Salah', value:'false', is_correct: falsity ? !!falsity.is_correct : false}
         ];
-        if(draft.options.filter(o=>o.is_correct).length !== 1) draft.options[0].is_correct = true, draft.options[1].is_correct = false;
+        const winner = typeState.true_false.options.findIndex(o => o.is_correct);
+        typeState.true_false.options.forEach((o,i)=>o.is_correct = winner === -1 ? i === 0 : i === winner);
         return;
       }
-      if(type==='multiple_choice' || type==='multiple_checkbox'){
-        if(!draft.options.length){
-          draft.options=[
-            {label:'A',value:'A',is_correct:type==='multiple_choice'},
-            {label:'B',value:'B',is_correct:type==='multiple_checkbox'},
-            {label:'C',value:'C',is_correct:false},
-            {label:'D',value:'D',is_correct:false}
-          ];
+
+      if(type === 'multiple_choice' || type === 'multiple_checkbox'){
+        if(typeState[type].options.length < 2){
+          typeState[type].options = makeDefaultOptions(type);
         }
         return;
       }
-      draft.options=[];
+
+      if(type === 'short_answer' && !Array.isArray(typeState.short_answer.accepted_answers)){
+        typeState.short_answer.accepted_answers = [];
+      }
     }
 
-    function readTypePanel(panel){
+    function readTypePanel(panel, type){
       if(!panel) return;
-      if(draft.type==='multiple_choice' || draft.type==='multiple_checkbox' || draft.type==='true_false'){
-        draft.options=[...panel.querySelectorAll('[data-option-row]')].map(row=>(
-          {
-            label:row.querySelector('[data-label]')?.value.trim() || '',
-            value:row.querySelector('[data-value]')?.value.trim() || '',
-            is_correct:!!row.querySelector('[data-correct]')?.checked
-          }
-        ));
-      }else if(draft.type==='short_answer'){
-        draft.accepted_answers=[...panel.querySelectorAll('[data-answer]')]
-          .map(input=>input.value.trim())
+
+      if(type === 'multiple_choice' || type === 'multiple_checkbox' || type === 'true_false'){
+        const rows = [...panel.querySelectorAll('[data-option-row]')].map(row => ({
+          label: row.querySelector('[data-label]')?.value.trim() || '',
+          value: row.querySelector('[data-value]')?.value.trim() || '',
+          is_correct: !!row.querySelector('[data-correct]')?.checked
+        }));
+        typeState[type].options = rows;
+      }else if(type === 'short_answer'){
+        typeState.short_answer.accepted_answers = [...panel.querySelectorAll('[data-answer]')]
+          .map(input => input.value.trim())
           .filter(Boolean);
-      }else if(draft.type==='essay'){
-        draft.rubric=panel.querySelector('[data-rubric]')?.value.trim() || '';
-      }else if(draft.type==='file_upload'){
-        draft.file_config={
-          allowed_mime:panel.querySelector('[data-file-format]')?.value || 'pdf',
-          max_size_mb:Number(panel.querySelector('[data-max-size]')?.value || 10),
-          file_required:panel.querySelector('[data-file-required]')?.checked !== false
+      }else if(type === 'essay'){
+        typeState.essay.rubric = panel.querySelector('[data-rubric]')?.value.trim() || '';
+      }else if(type === 'file_upload'){
+        typeState.file_upload = {
+          allowed_mime: panel.querySelector('[data-file-format]')?.value || 'pdf',
+          max_size_mb: Number(panel.querySelector('[data-max-size]')?.value || 10),
+          file_required: panel.querySelector('[data-file-required]')?.checked !== false
         };
       }
     }
 
     function renderTypePanel(panel){
-      normalizeOptionsForType(draft.type);
-      const typeInfo=TYPES[draft.type];
+      ensureTypeState(baseDraft.type);
+      const typeInfo = TYPES[baseDraft.type];
 
-      panel.innerHTML=`
-        <section class="question-type-card-v472">
+      panel.innerHTML = `
+        <section class="question-type-card-v472 question-type-card-v474">
           <div class="question-type-card-head-v472">
-            <div class="question-type-card-icon-v472">${draft.type==='file_upload'?'↥':draft.type==='essay'?'✎':'✓'}</div>
+            <div class="question-type-card-icon-v472">${baseDraft.type==='file_upload'?'↥':baseDraft.type==='essay'?'✎':baseDraft.type==='short_answer'?'Aa':'✓'}</div>
             <div>
               <span class="eyebrow">${esc(typeInfo.label)}</span>
               <strong>${esc(typeInfo.description)}</strong>
@@ -401,84 +446,110 @@
         </section>
       `;
 
-      const body=panel.querySelector('[data-type-body]');
-      const addOptionRow=(option,index,locked=false)=>{
-        const row=document.createElement('div');
-        row.className='question-option-row-v472';
-        row.dataset.optionRow='1';
-        const control = draft.type==='multiple_checkbox' ? 'checkbox' : 'radio';
-        const name = `correct-${window.SYKA_UTILS.randomId('q')}`;
-        row.innerHTML=`
+      const body = panel.querySelector('[data-type-body]');
+
+      const addOptionRow = (option, index, locked=false) => {
+        const row = document.createElement('div');
+        row.className = 'question-option-row-v472';
+        row.dataset.optionRow = '1';
+        const control = baseDraft.type === 'multiple_checkbox' ? 'checkbox' : 'radio';
+        const group = `correct-${window.SYKA_UTILS.randomId('q')}`;
+        row.innerHTML = `
           <div class="question-option-index-v472">${index+1}</div>
           <input data-label class="input" value="${escAttr(option.label)}" placeholder="Label, mis. A">
           <input data-value class="input" value="${escAttr(option.value)}" placeholder="Teks jawaban">
-          <label class="question-correct-v472"><input data-correct type="${control}" ${draft.type==='true_false'?`name="${name}"`:''} ${option.is_correct?'checked':''}> Benar</label>
+          <label class="question-correct-v472">
+            <input data-correct type="${control}" ${baseDraft.type==='multiple_choice' || baseDraft.type==='true_false'?`name="${group}"`:''} ${option.is_correct?'checked':''}>
+            Benar
+          </label>
           ${locked?'':'<button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>'}
         `;
-        row.querySelector('[data-correct]').addEventListener('change',()=>{
-          if(draft.type==='multiple_choice' || draft.type==='true_false'){
-            body.querySelectorAll('[data-option-row] [data-correct]').forEach(el=>{ if(el!==row.querySelector('[data-correct]')) el.checked=false; });
+        row.querySelector('[data-correct]').addEventListener('change', () => {
+          if(baseDraft.type === 'multiple_choice' || baseDraft.type === 'true_false'){
+            body.querySelectorAll('[data-option-row] [data-correct]').forEach(el => {
+              if(el !== row.querySelector('[data-correct]')) el.checked = false;
+            });
           }
         });
-        row.querySelector('[data-remove]')?.addEventListener('click',()=>row.remove());
+        row.querySelector('[data-remove]')?.addEventListener('click', () => {
+          row.remove();
+          typeState[baseDraft.type].options = [...body.querySelectorAll('[data-option-row]')].map(r => ({
+            label:r.querySelector('[data-label]')?.value.trim() || '',
+            value:r.querySelector('[data-value]')?.value.trim() || '',
+            is_correct:!!r.querySelector('[data-correct]')?.checked
+          }));
+        });
         body.appendChild(row);
       };
 
       if(typeInfo.supportsOptions){
-        draft.options.forEach((option,index)=>addOptionRow(option,index,draft.type==='true_false'));
-        if(draft.type!=='true_false'){
-          const controls=document.createElement('div');
-          controls.className='question-type-controls-v472';
-          controls.innerHTML=`<button type="button" class="btn btn-secondary btn-sm" data-add-option>+ Tambah opsi</button><span>Gunakan 2–8 opsi.</span>`;
-          controls.querySelector('[data-add-option]').onclick=()=>{
-            const count=body.querySelectorAll('[data-option-row]').length;
-            if(count>=8){ window.SYKA_TOAST.show('Maksimal 8 opsi.','warning'); return; }
-            const letters=['A','B','C','D','E','F','G','H'];
-            addOptionRow({label:letters[count],value:'',is_correct:false},count,false);
+        const rows = typeState[baseDraft.type].options;
+        rows.forEach((option,index) => addOptionRow(option,index,baseDraft.type==='true_false'));
+
+        if(baseDraft.type !== 'true_false'){
+          const controls = document.createElement('div');
+          controls.className = 'question-type-controls-v472';
+          controls.innerHTML = `<button type="button" class="btn btn-secondary btn-sm" data-add-option>+ Tambah opsi</button><span>Gunakan 2–8 opsi.</span>`;
+          controls.querySelector('[data-add-option]').onclick = () => {
+            const count = body.querySelectorAll('[data-option-row]').length;
+            if(count >= 8){
+              window.SYKA_TOAST.show('Maksimal 8 opsi.','warning');
+              return;
+            }
+            const letters = ['A','B','C','D','E','F','G','H'];
+            addOptionRow({label:letters[count],value:letters[count],is_correct:false},count,false);
           };
           body.appendChild(controls);
         }
-      } else if(draft.type==='short_answer'){
-        if(!draft.accepted_answers.length) draft.accepted_answers=[''];
-        draft.accepted_answers.forEach(answer=>{
-          const row=document.createElement('div'); row.className='question-answer-row-v472';
+      }else if(baseDraft.type === 'short_answer'){
+        const answers = typeState.short_answer.accepted_answers.length
+          ? typeState.short_answer.accepted_answers
+          : [''];
+        answers.forEach(answer => {
+          const row = document.createElement('div');
+          row.className='question-answer-row-v472';
           row.innerHTML=`<input data-answer class="input" value="${escAttr(answer)}" placeholder="Jawaban yang diterima"><button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>`;
           row.querySelector('[data-remove]').onclick=()=>row.remove();
           body.appendChild(row);
         });
-        const controls=document.createElement('div'); controls.className='question-type-controls-v472';
+        const controls = document.createElement('div');
+        controls.className='question-type-controls-v472';
         controls.innerHTML='<button type="button" class="btn btn-secondary btn-sm" data-add-answer>+ Tambah jawaban</button><span>Contoh: Jakarta, jakarta, DKI Jakarta.</span>';
         controls.querySelector('[data-add-answer]').onclick=()=>{
-          const row=document.createElement('div'); row.className='question-answer-row-v472'; row.innerHTML='<input data-answer class="input" placeholder="Jawaban yang diterima"><button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>'; row.querySelector('[data-remove]').onclick=()=>row.remove(); body.insertBefore(row,controls);
+          const row=document.createElement('div');
+          row.className='question-answer-row-v472';
+          row.innerHTML='<input data-answer class="input" placeholder="Jawaban yang diterima"><button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>';
+          row.querySelector('[data-remove]').onclick=()=>row.remove();
+          body.insertBefore(row, controls);
         };
         body.appendChild(controls);
-      } else if(draft.type==='essay'){
-        body.innerHTML=`<div class="type-note-v47"><strong>Penilaian manual</strong><span>Jawaban masuk ke Grading. Tidak ada kunci otomatis.</span></div><label>Rubrik penilaian<textarea data-rubric rows="5" placeholder="Contoh: akurasi 50%, argumentasi 30%, presentasi 20%">${esc(draft.rubric)}</textarea></label>`;
-      } else if(draft.type==='file_upload'){
-        body.innerHTML=`<div class="form-grid-2"><label>Format file<select data-file-format><option value="pdf">PDF</option><option value="image">Gambar</option><option value="document">Dokumen</option><option value="mixed">PDF + gambar + dokumen</option></select></label><label>Maksimal ukuran<input data-max-size type="number" min="1" max="50" value="${draft.file_config.max_size_mb}"></label></div><label class="checkline"><input data-file-required type="checkbox" ${draft.file_config.file_required?'checked':''}> File wajib</label>`;
-        body.querySelector('[data-file-format]').value=draft.file_config.allowed_mime;
+      }else if(baseDraft.type === 'essay'){
+        body.innerHTML=`<div class="type-note-v47"><strong>Penilaian manual</strong><span>Jawaban masuk ke Grading. Tidak ada kunci otomatis.</span></div><label>Rubrik penilaian<textarea data-rubric rows="5" placeholder="Contoh: akurasi 50%, argumentasi 30%, presentasi 20%">${esc(typeState.essay.rubric)}</textarea></label>`;
+      }else if(baseDraft.type === 'file_upload'){
+        body.innerHTML=`<div class="form-grid-2"><label>Format file<select data-file-format><option value="pdf">PDF</option><option value="image">Gambar</option><option value="document">Dokumen</option><option value="mixed">PDF + gambar + dokumen</option></select></label><label>Maksimal ukuran<input data-max-size type="number" min="1" max="50" value="${typeState.file_upload.max_size_mb}"></label></div><label class="checkline"><input data-file-required type="checkbox" ${typeState.file_upload.file_required?'checked':''}> File wajib</label>`;
+        body.querySelector('[data-file-format]').value=typeState.file_upload.allowed_mime;
       }
     }
 
     function renderPreview(root){
-      const label=TYPES[draft.type]?.label || draft.type;
-      root.innerHTML=`<div class="question-live-preview-v472"><div><span class="eyebrow">PREVIEW PESERTA</span><span class="preview-type-pill-v472">${esc(label)}</span></div><strong>${esc(draft.prompt || 'Pertanyaan akan muncul di sini')}</strong><small>${draft.points} poin · ${draft.required?'Wajib':'Opsional'}</small></div>`;
+      const label=TYPES[baseDraft.type]?.label || baseDraft.type;
+      root.innerHTML=`<div class="question-live-preview-v472"><div><span class="eyebrow">PREVIEW PESERTA</span><span class="preview-type-pill-v472">${esc(label)}</span></div><strong>${esc(baseDraft.prompt || 'Pertanyaan akan muncul di sini')}</strong><small>${baseDraft.points} poin · ${baseDraft.required?'Wajib':'Opsional'}</small></div>`;
     }
 
     window.SYKA_MODAL.open({
-      title:existing?'Edit soal':'Tambah soal',
+      title: existing ? 'Edit soal' : 'Tambah soal',
       wide:true,
       html:`
         <form id="qf" class="form-card question-form-v47">
           <div class="question-builder-header-v472">
-            <div><span class="eyebrow">QUESTION BUILDER</span><h3>${existing?'Edit pertanyaan':'Buat pertanyaan baru'}</h3><p>Pilih tipe soal terlebih dahulu. Panel di bawah akan menyesuaikan tanpa kehilangan data umum.</p></div>
+            <div><span class="eyebrow">QUESTION BUILDER</span><h3>${existing?'Edit pertanyaan':'Buat pertanyaan baru'}</h3><p>Tipe soal dapat diganti kapan saja. Setiap tipe memiliki draft konfigurasi sendiri dan tidak merusak tipe lainnya.</p></div>
           </div>
           <div class="form-grid-2">
-            <label>Kompetisi<select id="competition"><option value="">Tidak terikat</option>${comps.map(c=>`<option value="${c.id}" ${draft.competition_id===c.id?'selected':''}>${esc(c.title)}</option>`).join('')}</select></label>
-            <label>Jenis soal<select id="type">${Object.entries(TYPES).map(([value,info])=>`<option value="${value}" ${draft.type===value?'selected':''}>${esc(info.label)}</option>`).join('')}</select></label>
+            <label>Kompetisi<select id="competition"><option value="">Tidak terikat</option>${comps.map(c=>`<option value="${c.id}" ${baseDraft.competition_id===c.id?'selected':''}>${esc(c.title)}</option>`).join('')}</select></label>
+            <label>Jenis soal<select id="type">${Object.entries(TYPES).map(([value,info])=>`<option value="${value}" ${baseDraft.type===value?'selected':''}>${esc(info.label)}</option>`).join('')}</select></label>
           </div>
-          <label>Pertanyaan *<textarea id="prompt" rows="5" required>${esc(draft.prompt)}</textarea></label>
-          <div class="form-grid-3"><label>Poin<input id="points" type="number" min="0" step="0.5" value="${draft.points}"></label><label>Urutan<input id="order" type="number" min="0" value="${draft.display_order}"></label><label class="checkline question-required-v47"><input id="required" type="checkbox" ${draft.required?'checked':''}> Wajib dijawab</label></div>
+          <label>Pertanyaan *<textarea id="prompt" rows="5" required>${esc(baseDraft.prompt)}</textarea></label>
+          <div class="form-grid-3"><label>Poin<input id="points" type="number" min="0" step="0.5" value="${baseDraft.points}"></label><label>Urutan<input id="order" type="number" min="0" value="${baseDraft.display_order}"></label><label class="checkline question-required-v47"><input id="required" type="checkbox" ${baseDraft.required?'checked':''}> Wajib dijawab</label></div>
           <div id="type-zone"></div>
           <div class="question-preview-v47" id="question-preview"></div>
           <div id="qf-feedback"></div>
@@ -491,22 +562,39 @@
         const zone=box.querySelector('#type-zone');
         const preview=box.querySelector('#question-preview');
         const feedback=box.querySelector('#qf-feedback');
+
         const syncCommon=()=>{
-          draft.competition_id=box.querySelector('#competition').value || '';
-          draft.prompt=box.querySelector('#prompt').value.trim();
-          draft.points=Number(box.querySelector('#points').value || 0);
-          draft.display_order=Number(box.querySelector('#order').value || 0);
-          draft.required=box.querySelector('#required').checked;
+          baseDraft.competition_id=box.querySelector('#competition').value || '';
+          baseDraft.prompt=box.querySelector('#prompt').value.trim();
+          baseDraft.points=Number(box.querySelector('#points').value || 0);
+          baseDraft.display_order=Number(box.querySelector('#order').value || 0);
+          baseDraft.required=box.querySelector('#required').checked;
         };
-        const syncBeforeTypeChange=()=>{ syncCommon(); readTypePanel(zone); };
-        const renderAll=()=>{ renderTypePanel(zone); renderPreview(preview); };
+
+        const renderAll=()=>{
+          renderTypePanel(zone);
+          renderPreview(preview);
+        };
+
+        const changeType=(nextType)=>{
+          // First commit the currently visible type-specific controls into its own draft bucket.
+          syncCommon();
+          readTypePanel(zone, baseDraft.type);
+
+          // Switch only after the old panel has been captured.
+          baseDraft.type=nextType;
+          ensureTypeState(nextType);
+
+          // Rebuild the panel from the destination type's own state.
+          renderAll();
+        };
 
         box.querySelector('[data-close]').onclick=()=>window.SYKA_MODAL.close();
-        typeEl.addEventListener('change',()=>{ syncBeforeTypeChange(); draft.type=typeEl.value; renderAll(); });
+        typeEl.addEventListener('change',()=>changeType(typeEl.value));
         box.querySelector('#competition').addEventListener('change',syncCommon);
-        box.querySelector('#prompt').addEventListener('input',()=>{syncCommon(); renderPreview(preview);});
-        box.querySelector('#points').addEventListener('input',()=>{syncCommon(); renderPreview(preview);});
-        box.querySelector('#required').addEventListener('change',()=>{syncCommon(); renderPreview(preview);});
+        box.querySelector('#prompt').addEventListener('input',()=>{syncCommon();renderPreview(preview);});
+        box.querySelector('#points').addEventListener('input',()=>{syncCommon();renderPreview(preview);});
+        box.querySelector('#required').addEventListener('change',()=>{syncCommon();renderPreview(preview);});
 
         renderAll();
 
@@ -514,42 +602,42 @@
           e.preventDefault();
           feedback.innerHTML='';
           syncCommon();
-          readTypePanel(zone);
+          readTypePanel(zone,baseDraft.type);
           try{
-            if(!draft.prompt) throw new Error('Pertanyaan wajib diisi.');
-            if(!Number.isFinite(draft.points) || draft.points<0) throw new Error('Poin tidak valid.');
-            if(!Number.isInteger(draft.display_order) || draft.display_order<0) throw new Error('Urutan harus berupa angka 0 atau lebih.');
+            if(!baseDraft.prompt) throw new Error('Pertanyaan wajib diisi.');
+            if(!Number.isFinite(baseDraft.points) || baseDraft.points<0) throw new Error('Poin tidak valid.');
+            if(!Number.isInteger(baseDraft.display_order) || baseDraft.display_order<0) throw new Error('Urutan harus berupa angka 0 atau lebih.');
 
             const payload={
               question_bank_id:bankId,
-              competition_id:draft.competition_id || null,
-              type:draft.type,
-              prompt:draft.prompt,
-              points:draft.points,
-              required:draft.required,
-              display_order:draft.display_order,
+              competition_id:baseDraft.competition_id || null,
+              type:baseDraft.type,
+              prompt:baseDraft.prompt,
+              points:baseDraft.points,
+              required:baseDraft.required,
+              display_order:baseDraft.display_order,
               config:{}
             };
 
             let options=[];
-            if(draft.type==='multiple_choice' || draft.type==='multiple_checkbox' || draft.type==='true_false'){
-              options=draft.options.filter(o=>o.label || o.value);
+            if(baseDraft.type==='multiple_choice' || baseDraft.type==='multiple_checkbox' || baseDraft.type==='true_false'){
+              options=cloneOptions(typeState[baseDraft.type].options).filter(o=>o.label || o.value);
               if(options.length<2) throw new Error('Tambahkan minimal 2 opsi.');
               if(options.some(o=>!o.label || !o.value)) throw new Error('Semua opsi harus memiliki label dan value.');
               const correct=options.filter(o=>o.is_correct).length;
-              if(draft.type==='multiple_choice' || draft.type==='true_false'){
+              if(baseDraft.type==='multiple_choice' || baseDraft.type==='true_false'){
                 if(correct!==1) throw new Error('Harus ada tepat 1 jawaban benar.');
               }else if(correct<1){
                 throw new Error('Pilihan majemuk harus memiliki minimal 1 jawaban benar.');
               }
-            }else if(draft.type==='short_answer'){
-              const accepted=[...new Set(draft.accepted_answers.map(x=>x.trim()).filter(Boolean))];
+            }else if(baseDraft.type==='short_answer'){
+              const accepted=[...new Set(typeState.short_answer.accepted_answers.map(x=>x.trim()).filter(Boolean))];
               if(!accepted.length) throw new Error('Masukkan minimal 1 jawaban yang diterima.');
               payload.config={accepted_answers:accepted,case_sensitive:false,trim_whitespace:true};
-            }else if(draft.type==='essay'){
-              payload.config={rubric:draft.rubric || null,manual_grading:true};
-            }else if(draft.type==='file_upload'){
-              payload.config={allowed_mime:draft.file_config.allowed_mime,max_size_mb:Math.max(1,Math.min(50,draft.file_config.max_size_mb)),file_required:draft.file_config.file_required};
+            }else if(baseDraft.type==='essay'){
+              payload.config={rubric:typeState.essay.rubric || null,manual_grading:true};
+            }else if(baseDraft.type==='file_upload'){
+              payload.config={allowed_mime:typeState.file_upload.allowed_mime,max_size_mb:Math.max(1,Math.min(50,typeState.file_upload.max_size_mb)),file_required:typeState.file_upload.file_required};
             }
 
             const saved=await svc().saveQuestion(payload,existing?.id||null);
