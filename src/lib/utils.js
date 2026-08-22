@@ -102,10 +102,10 @@
     });
     if(!root.__SYKA_SCHEDULE_OUTSIDE){
       root.__SYKA_SCHEDULE_OUTSIDE=true;
-      document.addEventListener('click',e=>{
-        if(!e.target.closest('.schedule-field'))closeAll();
-      },true);
-      document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();});
+      // Schedule popovers are intentionally persistent while the user edits.
+      // They close only from an explicit control (Selesai/close button) or
+      // when another schedule field is opened. Clicking outside or Escape
+      // must never discard an in-progress date/time selection.
       window.addEventListener('resize',()=>fields.forEach(f=>f.classList.contains('open')&&positionPopover(f)));
       window.addEventListener('scroll',()=>fields.forEach(f=>f.classList.contains('open')&&positionPopover(f)),{passive:true});
     }

@@ -190,10 +190,10 @@
     });
     if(!root.__SYKA_SCHEDULE_OUTSIDE){
       root.__SYKA_SCHEDULE_OUTSIDE=true;
-      document.addEventListener('click',e=>{
-        if(!e.target.closest('.schedule-field'))closeAll();
-      },true);
-      document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();});
+      // Schedule popovers are intentionally persistent while the user edits.
+      // They close only from an explicit control (Selesai/close button) or
+      // when another schedule field is opened. Clicking outside or Escape
+      // must never discard an in-progress date/time selection.
       window.addEventListener('resize',()=>fields.forEach(f=>f.classList.contains('open')&&positionPopover(f)));
       window.addEventListener('scroll',()=>fields.forEach(f=>f.classList.contains('open')&&positionPopover(f)),{passive:true});
     }
@@ -693,18 +693,116 @@
 
 /* src/components/Modal.js */
 (function () {
-  function open({ title='', html='', onOpen, onClose, wide=false }={}) {
+  let activeRoot = null;
+  let previousOverflow = '';
+
+  function open({ title = '', html = '', onOpen, onClose, wide = false, closeOnBackdrop = false, closeOnEscape = false } = {}) {
     close();
-    const root=document.createElement('div'); root.id='syka-modal-root'; root.className='syka-modal-backdrop';
-    root.innerHTML=`<div class="syka-modal ${wide?'syka-modal-wide':''}" role="dialog" aria-modal="true"><div class="syka-modal-head"><div><h2>${window.SYKA_UTILS.escapeHtml(title)}</h2></div><button class="syka-icon-btn" data-close aria-label="Tutup">×</button></div><div class="syka-modal-body">${html}</div></div>`;
-    document.body.appendChild(root); root.addEventListener('click',e=>{ if(e.target===root || e.target.closest('[data-close]')) close(); }); onOpen?.(root.querySelector('.syka-modal-body'), root);
-    window._sykaModalClose=()=>{ onClose?.(); root.remove(); window._sykaModalClose=null; };
+
+    const root = document.createElement('div');
+    root.id = 'syka-modal-root';
+    root.className = 'syka-modal-backdrop';
+    root.dataset.closeOnBackdrop = closeOnBackdrop ? 'true' : 'false';
+
+    root.innerHTML = `
+      <div class="syka-modal ${wide ? 'syka-modal-wide' : ''}"
+           role="dialog"
+           aria-modal="true"
+           aria-label="${window.SYKA_UTILS.escapeHtml(title)}">
+        <div class="syka-modal-head">
+          <div>
+            <h2>${window.SYKA_UTILS.escapeHtml(title)}</h2>
+          </div>
+          <button
+            class="syka-icon-btn"
+            type="button"
+            data-close
+            aria-label="Tutup">
+            ×
+          </button>
+        </div>
+        <div class="syka-modal-body">${html}</div>
+      </div>
+    `;
+
+    document.body.appendChild(root);
+    activeRoot = root;
+    previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // IMPORTANT: modal backdrop clicks never close by default.
+    // Forms/editors can safely be clicked outside their dialog without
+    // accidentally losing the user's work. Only an explicit [data-close]
+    // control closes the modal, unless a caller opts into closeOnBackdrop.
+    root.addEventListener('click', (event) => {
+      const closeControl = event.target.closest?.('[data-close]');
+      if (closeControl) {
+        event.preventDefault();
+        close();
+        return;
+      }
+
+      if (
+        closeOnBackdrop &&
+        event.target === root
+      ) {
+        close();
+      }
+    });
+
+    const handleKeydown = (event) => {
+      // Default is deliberately locked: Escape does not dismiss a form.
+      if (closeOnEscape && event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+    };
+
+    if (closeOnEscape) {
+      root._sykaModalKeydown = handleKeydown;
+      document.addEventListener('keydown', handleKeydown);
+    }
+
+    onOpen?.(root.querySelector('.syka-modal-body'), root);
+
+    window._sykaModalClose = () => {
+      onClose?.();
+
+      if (root._sykaModalKeydown) {
+        document.removeEventListener('keydown', root._sykaModalKeydown);
+      }
+
+      if (root.isConnected) {
+        root.remove();
+      }
+
+      if (activeRoot === root) {
+        activeRoot = null;
+        document.body.style.overflow = previousOverflow || '';
+      }
+
+      window._sykaModalClose = null;
+    };
   }
-  function close(){ if(window._sykaModalClose) window._sykaModalClose(); else document.getElementById('syka-modal-root')?.remove(); }
-  window.SYKA_MODAL={open,close};
+
+  function close() {
+    if (window._sykaModalClose) {
+      window._sykaModalClose();
+      return;
+    }
+
+    const root = document.getElementById('syka-modal-root');
+    if (root) root.remove();
+    activeRoot = null;
+    document.body.style.overflow = previousOverflow || '';
+  }
+
+  window.SYKA_MODAL = {
+    open,
+    close,
+    isOpen: () => Boolean(activeRoot && activeRoot.isConnected)
+  };
 })();
-
-
 
 
 /* src/components/Skeleton.js */
@@ -1455,7 +1553,7 @@ window.SYKA_PAGE_AWARDS={render};})();
         <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text></span><span class="schedule-chevron">⌄</span></button>
       </div>
       <div class="schedule-popover" data-schedule-popover="${id}">
-        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div></div>
+        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div><button type="button" class="syka-icon-btn schedule-popover-close" data-schedule-done aria-label="Tutup">×</button></div>
         <div class="schedule-popover-section"><span class="schedule-section-title">Tanggal</span><div class="schedule-select-grid">
           <label>Hari<select data-dt-day="${id}">${options(days,p.day)}</select></label>
           <label>Bulan<select data-dt-month="${id}">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select></label>
@@ -1881,7 +1979,7 @@ window.SYKA_PAGE_AWARDS={render};})();
         <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text>${String(p.hour).padStart(2,'0')}:${String(Math.floor((p.minute||0)/5)*5).padStart(2,'0')}</span><span class="schedule-chevron">⌄</span></button>
       </div>
       <div class="schedule-popover" data-schedule-popover="${id}">
-        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div></div>
+        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div><button type="button" class="syka-icon-btn schedule-popover-close" data-schedule-done aria-label="Tutup">×</button></div>
         <div class="schedule-popover-section"><span class="schedule-section-title">Tanggal</span><div class="schedule-select-grid">
           <label>Hari<select data-dt-day="${id}">${options(days,p.day)}</select></label>
           <label>Bulan<select data-dt-month="${id}">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select></label>

@@ -128,7 +128,7 @@
         <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text>${String(p.hour).padStart(2,'0')}:${String(Math.floor((p.minute||0)/5)*5).padStart(2,'0')}</span><span class="schedule-chevron">⌄</span></button>
       </div>
       <div class="schedule-popover" data-schedule-popover="${id}">
-        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div></div>
+        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div><button type="button" class="syka-icon-btn schedule-popover-close" data-schedule-done aria-label="Tutup">×</button></div>
         <div class="schedule-popover-section"><span class="schedule-section-title">Tanggal</span><div class="schedule-select-grid">
           <label>Hari<select data-dt-day="${id}">${options(days,p.day)}</select></label>
           <label>Bulan<select data-dt-month="${id}">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select></label>
