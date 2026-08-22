@@ -18,7 +18,7 @@
     if(window.location.hash?.startsWith('#/'))return window.location.hash.slice(1);
     if(url.pathname===appPage){
       const tab=(url.searchParams.get('tab')||'').toLowerCase();
-      const aliases={competitions:'/lomba',competition:'/lomba',lomba:'/lomba',ranking:'/juara',leaderboard:'/juara',juara:'/juara',awards:'/prestasi',achievement:'/prestasi',prestasi:'/prestasi',profile:'/profile',profil:'/profile',orders:'/pesanan',order:'/pesanan',pesanan:'/pesanan',organizer:'/organizer',penyelenggara:'/organizer',admin:'/admin'};
+      const aliases={competitions:'/lomba',competition:'/lomba',lomba:'/lomba',ranking:'/juara',leaderboard:'/juara',juara:'/juara',awards:'/prestasi',achievement:'/prestasi',prestasi:'/prestasi',profile:'/profile',profil:'/profile',orders:'/pesanan',order:'/pesanan',pesanan:'/pesanan',store:'/toko',shop:'/toko',toko:'/toko',organizer:'/organizer',penyelenggara:'/organizer',admin:'/admin'};
       return aliases[tab]||'/';
     }
     return url.pathname||'/';

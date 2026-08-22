@@ -20,9 +20,9 @@ mkdirSync(dist, { recursive: true });
 
 const files = [
   'src/core/config.js','src/core/state.js','src/core/events.js','src/lib/utils.js','src/lib/supabase.js','src/lib/cloudinary.js',
-  'src/services/auth.service.js','src/services/profile.service.js','src/services/competition.service.js','src/services/registration.service.js','src/services/attempt.service.js','src/services/leaderboard.service.js','src/services/award.service.js','src/services/notification.service.js','src/services/order.service.js','src/services/admin.service.js','src/services/controlplane.service.js',
+  'src/services/auth.service.js','src/services/profile.service.js','src/services/competition.service.js','src/services/registration.service.js','src/services/attempt.service.js','src/services/leaderboard.service.js','src/services/award.service.js','src/services/notification.service.js','src/services/order.service.js','src/services/store.service.js','src/services/admin.service.js','src/services/controlplane.service.js',
   'src/components/Toast.js','src/components/Modal.js','src/components/Skeleton.js','src/components/EmptyState.js','src/components/CompetitionCard.js','src/components/Header.js','src/components/Sidebar.js','src/components/BottomNav.js',
-  'src/pages/Home.js','src/pages/Lomba.js','src/pages/Competition.js','src/pages/Registration.js','src/pages/Profile.js','src/pages/Leaderboard.js','src/pages/Awards.js','src/pages/Orders.js','src/pages/Verify.js','src/pages/Admin.js','src/pages/Organizer.js','src/pages/Placeholder.js','src/core/router.js','src/core/app.js'
+  'src/pages/Home.js','src/pages/Lomba.js','src/pages/Competition.js','src/pages/Registration.js','src/pages/Profile.js','src/pages/Leaderboard.js','src/pages/Awards.js','src/pages/Orders.js','src/pages/Store.js','src/pages/Verify.js','src/pages/Admin.js','src/pages/Organizer.js','src/pages/Placeholder.js','src/core/router.js','src/core/app.js'
 ];
 
 function readList(list) {

@@ -98,7 +98,7 @@
     if(window.location.hash?.startsWith('#/'))return window.location.hash.slice(1);
     if(url.pathname===appPage){
       const tab=(url.searchParams.get('tab')||'').toLowerCase();
-      const aliases={competitions:'/lomba',competition:'/lomba',lomba:'/lomba',ranking:'/juara',leaderboard:'/juara',juara:'/juara',awards:'/prestasi',achievement:'/prestasi',prestasi:'/prestasi',profile:'/profile',profil:'/profile',orders:'/pesanan',order:'/pesanan',pesanan:'/pesanan',organizer:'/organizer',penyelenggara:'/organizer',admin:'/admin'};
+      const aliases={competitions:'/lomba',competition:'/lomba',lomba:'/lomba',ranking:'/juara',leaderboard:'/juara',juara:'/juara',awards:'/prestasi',achievement:'/prestasi',prestasi:'/prestasi',profile:'/profile',profil:'/profile',orders:'/pesanan',order:'/pesanan',pesanan:'/pesanan',store:'/toko',shop:'/toko',toko:'/toko',organizer:'/organizer',penyelenggara:'/organizer',admin:'/admin'};
       return aliases[tab]||'/';
     }
     return url.pathname||'/';
@@ -334,6 +334,51 @@
 
 
 
+/* src/services/store.service.js */
+(function(){
+  function client(){return window.SYKA_SUPABASE.get();}
+
+  function roleAudience(){
+    const roles=window.SYKA_STATE.getState().auth.roles||[];
+    if(roles.includes('admin')) return ['student','teacher','organizer'];
+    const out=[];
+    if(roles.includes('student')) out.push('student');
+    if(roles.includes('teacher')) out.push('teacher');
+    if(roles.includes('organizer_member')) out.push('organizer');
+    return out.length?out:['student'];
+  }
+
+  async function listProducts(){
+    const {data,error}=await client().from('commerce_products').select('*').eq('is_active',true).order('sort_order',{ascending:true}).order('created_at',{ascending:false});
+    if(error)throw error;
+    const products=data||[];
+    const ids=products.map(p=>p.id);
+    if(!ids.length)return[];
+    const {data:benefits,error:be}=await client().from('commerce_product_benefits').select('*').in('product_id',ids).order('created_at',{ascending:true});
+    if(be)throw be;
+    const map={};
+    (benefits||[]).forEach(b=>(map[b.product_id]??=[]).push(b));
+    const audience=roleAudience();
+    return products.filter(p=>p.audiences?.some(a=>audience.includes(a))).map(p=>({...p,benefits:map[p.id]||[]}));
+  }
+
+  async function listEntitlements(userId){
+    if(!userId)return[];
+    const {data,error}=await client().from('user_product_entitlements').select('*').eq('user_id',userId).order('created_at',{ascending:false});
+    if(error)throw error;
+    return data||[];
+  }
+
+  async function createProductOrder(productId,quantity=1){
+    const {data,error}=await client().rpc('create_product_order',{p_product_id:productId,p_quantity:Math.max(1,Number(quantity)||1)});
+    if(error)throw error;
+    return data;
+  }
+
+  window.SYKA_STORE_SERVICE={listProducts,listEntitlements,createProductOrder};
+})();
+
+
 /* src/services/admin.service.js */
 (function(){
   function client(){ return window.SYKA_SUPABASE.get(); }
@@ -420,8 +465,16 @@
   async function moderateComment(id,moderation_state){return save('comments',{moderation_state,updated_at:new Date().toISOString()},id);}
   async function moderateQuestion(id,status){return save('questions',{status,updated_at:new Date().toISOString()},id);}
   async function listPlans(){return q('organizer_plans','*',qy=>qy.order('created_at',{ascending:false}));}
+  async function listPlanCatalog(){return q('plan_catalog','*',qy=>qy.order('sort_order',{ascending:true}));}
   async function listEntitlements(){return q('plan_entitlements','*',qy=>qy.order('plan_code'));}
   async function saveEntitlement(payload,id=null){return save('plan_entitlements',payload,id);}
+  async function deleteEntitlement(planCode,capability){const{error}=await c().from('plan_entitlements').delete().eq('plan_code',planCode).eq('capability',capability);if(error)throw error;}
+  async function savePlanBundle(payload){const{data,error}=await c().rpc('admin_save_plan_bundle',{p_plan_code:payload.plan_code,p_name:payload.name,p_description:payload.description||null,p_badge:payload.badge||null,p_monthly_price:Number(payload.monthly_price)||0,p_yearly_price:Number(payload.yearly_price)||0,p_is_active:payload.is_active!==false,p_entitlements:payload.entitlements||[]});if(error)throw error;return data;}
+  async function listCommerceProducts({admin=false}={}){let qy=c().from('commerce_products').select('*').order('sort_order',{ascending:true}).order('created_at',{ascending:false});if(!admin)qy=qy.eq('is_active',true);const{data,error}=await qy;if(error)throw error;return data||[];}
+  async function listCommerceBenefits(productId){return q('commerce_product_benefits','*',qy=>qy.eq('product_id',productId).order('created_at',{ascending:true}));}
+  async function saveCommerceProduct(payload,id=null){return save('commerce_products',payload,id);}
+  async function deleteCommerceProduct(id){const{error}=await c().from('commerce_products').delete().eq('id',id);if(error)throw error;}
+  async function replaceCommerceBenefits(productId,benefits=[]){const{error:de}=await c().from('commerce_product_benefits').delete().eq('product_id',productId);if(de)throw de;if(benefits.length){const{error}=await c().from('commerce_product_benefits').insert(benefits.map(b=>({...b,product_id:productId})));if(error)throw error;}}
   async function listFlags(){return q('feature_flags','*',qy=>qy.order('key'));}
   async function setFlag(key,enabled,config={}){const{data,error}=await c().from('feature_flags').upsert({key,enabled,config,updated_at:new Date().toISOString()},{onConflict:'key'}).select('*').single();if(error)throw error;return data;}
   async function listSettings(){return q('global_settings','*',qy=>qy.order('key'));}
@@ -430,7 +483,7 @@
   async function listSlides({admin=false}={}){let qy=c().from('home_slides').select('*').order('sort_order',{ascending:true}).order('created_at',{ascending:false});if(!admin){const now=new Date().toISOString();qy=qy.eq('is_active',true).or(`starts_at.is.null,starts_at.lte.${now}`).or(`ends_at.is.null,ends_at.gte.${now}`);}const{data,error}=await qy;if(error)throw error;return data||[];}
   async function saveSlide(payload,id=null){return save('home_slides',payload,id);}
   async function deleteSlide(id){const{error}=await c().from('home_slides').delete().eq('id',id);if(error)throw error;}
-  window.SYKA_CONTROL_SERVICE={platformStats,listUsers,setUserStatus,setUserRole,listOrganizers,listMyOrganizerMemberships,listCompetitionsAdmin,transitionCompetition,saveCompetition,listLevels,saveLevel,getRegistrationRules,saveRegistrationRules,listRewards,saveReward,listQuestionBanks,saveQuestionBank,listQuestions,saveQuestion,listOptions,replaceOptions,listRegistrations,reviewRegistration,listAttempts,listGradingItems,saveGrade,finalizeAttempt,listAwards,listCertificates,updateCertificate,listOrders,updateOrder,listTwibbonTemplates,saveTwibbonTemplate,listModeration,moderatePost,moderateComment,moderateQuestion,listPlans,listEntitlements,saveEntitlement,listFlags,setFlag,listSettings,setSetting,listAudit,listSlides,saveSlide,deleteSlide};
+  window.SYKA_CONTROL_SERVICE={platformStats,listUsers,setUserStatus,setUserRole,listOrganizers,listMyOrganizerMemberships,listCompetitionsAdmin,transitionCompetition,saveCompetition,listLevels,saveLevel,getRegistrationRules,saveRegistrationRules,listRewards,saveReward,listQuestionBanks,saveQuestionBank,listQuestions,saveQuestion,listOptions,replaceOptions,listRegistrations,reviewRegistration,listAttempts,listGradingItems,saveGrade,finalizeAttempt,listAwards,listCertificates,updateCertificate,listOrders,updateOrder,listTwibbonTemplates,saveTwibbonTemplate,listModeration,moderatePost,moderateComment,moderateQuestion,listPlans,listPlanCatalog,listEntitlements,saveEntitlement,deleteEntitlement,savePlanBundle,listCommerceProducts,listCommerceBenefits,saveCommerceProduct,deleteCommerceProduct,replaceCommerceBenefits,listFlags,setFlag,listSettings,setSetting,listAudit,listSlides,saveSlide,deleteSlide};
 })();
 
 
@@ -499,7 +552,7 @@
 
 /* src/components/Sidebar.js */
 (function(){
-  function render(){const auth=window.SYKA_STATE.getState().auth;const path=window.SYKA_UTILS.routePath();const admin=auth.roles.includes('admin');const organizer=auth.roles.includes('organizer_member')||admin;const items=[['/','Beranda','⌂'],['/lomba','Lomba','◈'],['/juara','Juara','♛'],['/prestasi','Prestasi','✦']];if(organizer)items.push(['/organizer','Penyelenggara','▣']);if(admin)items.push(['/admin','Admin','⚙']);const el=document.getElementById('syka-sidebar');if(!el)return;el.innerHTML=`<div class="sidebar-inner"><div class="sidebar-brand"><a href="${window.SYKA_ROUTER.href('/')}" class="brand-link"><span class="brand-logo">S</span><span><strong>Sykabelajar.id</strong><small>Platform kompetensi</small></span></a><button class="sidebar-collapse" id="sidebar-collapse">‹</button></div><nav class="sidebar-nav">${items.map(([href,label,icon])=>`<a href="${window.SYKA_ROUTER.href(href)}" class="side-item ${path===href?'active':''}"><span class="side-icon">${icon}</span><span>${label}</span></a>`).join('')}</nav><div class="sidebar-spacer"></div><div class="sidebar-footer"><button class="side-action" id="side-profile"><span>◎</span>${auth.user?'Profil Saya':'Masuk / Daftar'}</button><button class="side-action" id="side-theme"><span>◐</span>Tema</button></div></div>`;document.getElementById('sidebar-collapse')?.addEventListener('click',()=>window.SYKA_APP.toggleSidebar());document.getElementById('side-theme')?.addEventListener('click',()=>window.SYKA_APP.toggleTheme());document.getElementById('side-profile')?.addEventListener('click',()=>auth.user?window.SYKA_ROUTER.navigate('/profile'):window.SYKA_APP.openAuth('login'));}
+  function render(){const auth=window.SYKA_STATE.getState().auth;const path=window.SYKA_UTILS.routePath();const admin=auth.roles.includes('admin');const organizer=auth.roles.includes('organizer_member')||admin;const items=[['/','Beranda','⌂'],['/lomba','Lomba','◈'],['/juara','Juara','♛'],['/prestasi','Prestasi','✦']];if(auth.user)items.push(['/toko','Toko','◇']);if(organizer)items.push(['/organizer','Penyelenggara','▣']);if(admin)items.push(['/admin','Admin','⚙']);const el=document.getElementById('syka-sidebar');if(!el)return;el.innerHTML=`<div class="sidebar-inner"><div class="sidebar-brand"><a href="${window.SYKA_ROUTER.href('/')}" class="brand-link"><span class="brand-logo">S</span><span><strong>Sykabelajar.id</strong><small>Platform kompetensi</small></span></a><button class="sidebar-collapse" id="sidebar-collapse">‹</button></div><nav class="sidebar-nav">${items.map(([href,label,icon])=>`<a href="${window.SYKA_ROUTER.href(href)}" class="side-item ${path===href?'active':''}"><span class="side-icon">${icon}</span><span>${label}</span></a>`).join('')}</nav><div class="sidebar-spacer"></div><div class="sidebar-footer"><button class="side-action" id="side-profile"><span>◎</span>${auth.user?'Profil Saya':'Masuk / Daftar'}</button><button class="side-action" id="side-theme"><span>◐</span>Tema</button></div></div>`;document.getElementById('sidebar-collapse')?.addEventListener('click',()=>window.SYKA_APP.toggleSidebar());document.getElementById('side-theme')?.addEventListener('click',()=>window.SYKA_APP.toggleTheme());document.getElementById('side-profile')?.addEventListener('click',()=>auth.user?window.SYKA_ROUTER.navigate('/profile'):window.SYKA_APP.openAuth('login'));}
   window.SYKA_SIDEBAR={render};
 })();
 
@@ -583,6 +636,86 @@ window.SYKA_PAGE_AWARDS={render};})();
 window.SYKA_PAGE_ORDERS={render};})();
 
 
+/* src/pages/Store.js */
+(function(){
+  const esc=v=>window.SYKA_UTILS.escapeHtml(v);
+  const money=(v,currency='IDR')=>new Intl.NumberFormat('id-ID',{style:'currency',currency,maximumFractionDigits:0}).format(Number(v)||0);
+  const typeLabel={EDU_COIN_TOPUP:'Koin Edu',FEATURE_UNLOCK:'Fitur akun',DIGITAL_ITEM:'Item digital',DONATION:'Dukungan',PLAN:'Paket'};
+  const audienceLabel={student:'Pelajar',teacher:'Guru',organizer:'Penyelenggara'};
+
+  function currentAudience(){
+    const roles=window.SYKA_STATE.getState().auth.roles||[];
+    if(roles.includes('admin'))return 'Semua';
+    if(roles.includes('organizer_member'))return 'Penyelenggara';
+    if(roles.includes('teacher'))return 'Guru';
+    return 'Pelajar';
+  }
+
+  async function render(root){
+    const auth=window.SYKA_STATE.getState().auth;
+    if(!auth.user){
+      root.innerHTML=window.SYKA_EMPTY.render({title:'Masuk untuk membuka Toko',text:'Beli Koin Edu, buka fitur khusus, dukung Sykabelajar, dan kelola pembelianmu dalam satu tempat.',actionHtml:'<button class="btn btn-primary" id="store-login">Masuk</button>'});
+      document.getElementById('store-login')?.addEventListener('click',()=>window.SYKA_APP.openAuth('login',{target:'/toko'}));
+      return;
+    }
+
+    root.innerHTML=`
+      <section class="store-hero">
+        <div>
+          <span class="eyebrow">SYKABELAJAR STORE</span>
+          <h1>Fitur, Koin Edu, &amp; Dukungan</h1>
+          <p>Semua pembelian dirancang modular agar bisa dipakai pelajar, guru, dan penyelenggara sesuai kebutuhan.</p>
+        </div>
+        <div class="store-audience"><span class="store-audience-dot"></span><strong>${esc(currentAudience())}</strong><small>katalog yang relevan untuk akunmu</small></div>
+      </section>
+      <div class="store-notice"><span class="support-icon">◈</span><div><strong>Belum ada pembayaran langsung di browser</strong><p>Pesanan dibuat sebagai draft dan baru dianggap lunas setelah provider payment terverifikasi melalui webhook backend.</p></div></div>
+      <section class="store-section"><div class="section-head"><div><span class="eyebrow">CATALOG</span><h2>Yang bisa kamu gunakan</h2></div><a class="btn btn-ghost btn-sm" href="${window.SYKA_ROUTER.href('/pesanan')}">Pesanan saya →</a></div><div id="store-grid" class="store-grid"></div></section>
+    `;
+
+    try{
+      const products=await window.SYKA_STORE_SERVICE.listProducts();
+      const grid=document.getElementById('store-grid');
+      grid.innerHTML=products.map(productCard).join('')||window.SYKA_EMPTY.render({title:'Belum ada produk',text:'Katalog sedang disiapkan oleh Sykabelajar.'});
+      grid.querySelectorAll('[data-buy]').forEach(btn=>btn.addEventListener('click',()=>openBuy(products.find(p=>p.id===btn.dataset.buy))));
+    }catch(error){
+      document.getElementById('store-grid').innerHTML=window.SYKA_EMPTY.render({title:'Katalog belum dapat dimuat',text:error.message||'Coba lagi beberapa saat.'});
+    }
+  }
+
+  function productCard(p){
+    const benefit=(p.benefits||[])[0];
+    const benefits=(p.benefits||[]).map(b=>{
+      if(b.benefit_type==='EDU_COIN') return `<span>+${Number(b.quantity||0).toLocaleString('id-ID')} Koin Edu</span>`;
+      if(b.benefit_type==='FEATURE') return `<span>${esc(b.benefit_key||'Fitur khusus')}${b.duration_days?` · ${b.duration_days} hari`:''}</span>`;
+      if(b.benefit_type==='PLAN') return `<span>Paket ${esc(b.benefit_key||'')}</span>`;
+      return `<span>Benefit khusus</span>`;
+    }).join('');
+    const donation=p.product_type==='DONATION';
+    return `<article class="store-card ${p.is_featured?'featured':''}">
+      <div class="store-card-top"><span class="store-icon">${donation?'♥':p.product_type==='EDU_COIN_TOPUP'?'✦':p.product_type==='FEATURE_UNLOCK'?'◈':'◆'}</span><span class="chip">${esc(typeLabel[p.product_type]||p.product_type)}</span></div>
+      <h3>${esc(p.name)}</h3>
+      <p>${esc(p.short_description||p.description||'')}</p>
+      <div class="store-benefits">${benefits||'<span>Produk digital Sykabelajar</span>'}</div>
+      <div class="store-card-bottom"><div><small>${donation?'Dukungan':'Mulai dari'}</small><strong>${money(p.price,p.currency)}</strong></div><button type="button" class="btn btn-primary" data-buy="${esc(p.id)}">${donation?'Dukung':'Beli'}</button></div>
+    </article>`;
+  }
+
+  function openBuy(product){
+    if(!product)return;
+    const donation=product.product_type==='DONATION';
+    window.SYKA_MODAL.open({title:donation?'Dukung Sykabelajar':'Konfirmasi pesanan',html:`<div class="purchase-modal"><div class="purchase-summary"><div class="store-icon">${donation?'♥':'✦'}</div><div><span class="eyebrow">${esc(typeLabel[product.product_type]||'PRODUK')}</span><h3>${esc(product.name)}</h3><p>${esc(product.short_description||'')}</p></div></div><div class="purchase-price"><span>Total</span><strong id="purchase-total">${money(product.price,product.currency)}</strong></div><label class="quantity-label">Jumlah<input id="purchase-qty" type="number" min="1" max="20" value="1"></label><div class="form-hint">Pesanan dibuat sebagai DRAFT. Pembayaran baru dianggap berhasil setelah provider memvalidasi webhook di backend.</div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batalkan</button><button type="button" class="btn btn-primary" id="purchase-confirm">${donation?'Buat dukungan':'Buat pesanan'}</button></div></div>`,onOpen:body=>{
+      body.querySelector('[data-close]').onclick=()=>window.SYKA_MODAL.close();
+      const qty=body.querySelector('#purchase-qty');const total=body.querySelector('#purchase-total');
+      const recalc=()=>total.textContent=money((Number(qty.value)||1)*Number(product.price||0),product.currency);
+      qty.addEventListener('input',recalc);
+      body.querySelector('#purchase-confirm').onclick=async()=>{const btn=body.querySelector('#purchase-confirm');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Membuat…';try{const order=await window.SYKA_STORE_SERVICE.createProductOrder(product.id,Math.max(1,Math.min(20,Number(qty.value)||1)));window.SYKA_MODAL.close();window.SYKA_TOAST.show(`Pesanan #${String(order.id).slice(0,8)} dibuat.`, 'success');setTimeout(()=>window.SYKA_ROUTER.navigate('/pesanan'),250);}catch(error){btn.disabled=false;btn.textContent=donation?'Buat dukungan':'Buat pesanan';body.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message||'Pesanan gagal dibuat.')}</div>`);}};
+    }});
+  }
+
+  window.SYKA_PAGE_STORE={render};
+})();
+
+
 /* src/pages/Verify.js */
 (function(){
   async function render(root,code){
@@ -599,11 +732,11 @@ window.SYKA_PAGE_ORDERS={render};})();
 /* src/pages/Admin.js */
 (function(){
   const svc=()=>window.SYKA_CONTROL_SERVICE;const esc=window.SYKA_UTILS.escapeHtml;const fmt=window.SYKA_UTILS.formatDateTime;const fn=window.SYKA_UTILS.formatNumber;
-  const tabs=[['dashboard','Dashboard'],['users','Pengguna'],['competitions','Kompetisi'],['questions','Soal'],['twibbon','Twibbon'],['results','Hasil'],['certificates','Sertifikat'],['orders','Pesanan'],['moderation','Moderasi'],['plans','Paket'],['settings','Pengaturan'],['audit','Audit']];
+  const tabs=[['dashboard','Dashboard'],['users','Pengguna'],['competitions','Kompetisi'],['questions','Soal'],['twibbon','Twibbon'],['results','Hasil'],['certificates','Sertifikat'],['orders','Pesanan'],['moderation','Moderasi'],['plans','Paket'],['monetization','Monetisasi'],['settings','Pengaturan'],['audit','Audit']];
   const transitions={DRAFT:['PUBLISHED','SUSPENDED','CANCELLED'],PUBLISHED:['REGISTRATION_OPEN','SUSPENDED','CANCELLED'],REGISTRATION_OPEN:['REGISTRATION_CLOSED','SUSPENDED','CANCELLED'],REGISTRATION_CLOSED:['LIVE','SUSPENDED','CANCELLED'],LIVE:['SUBMISSION_CLOSED','SUSPENDED','CANCELLED'],SUBMISSION_CLOSED:['GRADING','SUSPENDED','CANCELLED'],GRADING:['RESULT_PUBLISHED','SUSPENDED'],RESULT_PUBLISHED:['ARCHIVED','SUSPENDED'],SUSPENDED:['DRAFT','PUBLISHED','REGISTRATION_OPEN','REGISTRATION_CLOSED','LIVE','SUBMISSION_CLOSED','GRADING','RESULT_PUBLISHED','CANCELLED']};
   function shell(tab,title,subtitle){return `<div class="control-head"><div><span class="eyebrow">ADMIN CONTROL PLANE</span><h1>${title}</h1><p>${subtitle}</p></div><div class="control-head-meta"><span class="security-badge">RLS · server authoritative</span></div></div><div class="control-tabs">${tabs.map(([k,l])=>`<button type="button" class="control-tab ${k===tab?'active':''}" data-tab="${k}">${l}</button>`).join('')}</div><div id="control-content"></div>`;}
   async function render(root){const auth=window.SYKA_STATE.getState().auth;if(!auth.user){root.innerHTML=window.SYKA_EMPTY.render({title:'Masuk diperlukan',text:'Panel admin hanya dapat diakses oleh administrator.',actionHtml:'<button class="btn btn-primary" id="admin-login">Masuk</button>'});document.getElementById('admin-login')?.addEventListener('click',()=>window.SYKA_APP.openAuth('login',{target:'/admin'}));return;}if(!auth.roles.includes('admin')){root.innerHTML=window.SYKA_EMPTY.render({title:'Akses ditolak',text:'Akun ini belum memiliki role admin.',icon:'⊘'});return;}const q=window.SYKA_STATE.getState().route.query;const tab=tabs.some(([k])=>k===q.tab)?q.tab:'dashboard';root.innerHTML=shell(tab,'Panel Admin','Kelola platform, moderasi, kompetisi, transaksi, feature flags, dan audit dari satu control plane.');root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>window.SYKA_ROUTER.navigate('/admin',{tab:b.dataset.tab}));try{await renderTab(document.getElementById('control-content'),tab);}catch(error){document.getElementById('control-content').innerHTML=window.SYKA_EMPTY.render({title:'Modul gagal dimuat',text:error.message||'Periksa migration/RLS dan coba lagi.',actionHtml:'<button class="btn btn-ghost" id="cp-retry">Coba lagi</button>'});document.getElementById('cp-retry')?.addEventListener('click',()=>render(root));}}
-  async function renderTab(root,tab){const map={dashboard,users,competitions,questions,twibbon,results,certificates,orders,moderation,plans,settings,audit};return map[tab]?.(root);}
+  async function renderTab(root,tab){const map={dashboard,users,competitions,questions,twibbon,results,certificates,orders,moderation,plans,monetization,settings,audit};return map[tab]?.(root);}
   async function dashboard(root){const [stats,comps,users,audit,slides]=await Promise.all([svc().platformStats(),svc().listCompetitionsAdmin({limit:200}),svc().listUsers({limit:300}),svc().listAudit({limit:8}),svc().listSlides({admin:true})]);root.innerHTML=`<div class="kpi-grid"><div class="kpi-card"><span>Siswa</span><strong>${fn(stats.total_students)}</strong><small>akun aktif</small></div><div class="kpi-card"><span>Sekolah</span><strong>${fn(stats.total_schools)}</strong><small>institusi terdaftar</small></div><div class="kpi-card"><span>Penerima prestasi</span><strong>${fn(stats.total_award_recipients)}</strong><small>awards publik</small></div><div class="kpi-card"><span>Juara</span><strong>${fn(stats.total_champions)}</strong><small>peraih posisi 1</small></div></div><div class="control-grid-2"><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">PLATFORM</span><h2>Ringkasan operasional</h2></div><span class="live-dot">LIVE</span></div><div class="metric-grid"><div><b>${comps.length}</b><span>Kompetisi</span></div><div><b>${users.length}</b><span>Pengguna</span></div><div><b>${slides.length}</b><span>Promo slide</span></div><div><b>${audit.length}</b><span>Audit terbaru</span></div></div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">AUDIT</span><h2>Aktivitas terakhir</h2></div></div>${audit.length?audit.map(a=>`<div class="activity-row"><div class="activity-icon">↗</div><div><strong>${esc(a.action)}</strong><small>${esc(a.entity_type)} · ${esc(a.entity_id||'')}</small></div><time>${fmt(a.created_at)}</time></div>`).join(''):window.SYKA_EMPTY.render({title:'Audit masih kosong',text:'Mutation privileged akan muncul di sini.'})}</section></div><section class="panel-card admin-section"><div class="panel-head"><div><span class="eyebrow">HOME PROMO</span><h2>Hero slides</h2></div><button class="btn btn-primary btn-sm" id="quick-slide">+ Tambah slide</button></div><div class="mini-list">${slides.slice(0,5).map(s=>`<div class="mini-list-row"><div class="media-thumb">${s.image_url?`<img src="${esc(s.image_url)}" alt="">`:'✦'}</div><div><strong>${esc(s.title)}</strong><small>${esc(s.subtitle||'—')}</small></div><span class="status-pill ${s.is_active?'status-success':'status-neutral'}">${s.is_active?'Aktif':'Draft'}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada slide',text:'Tambahkan banner promosi dari menu Kompetisi/Settings.'})}</div></section>`;document.getElementById('quick-slide').onclick=()=>slideModal();}
   async function users(root){const rows=await svc().listUsers({limit:250});root.innerHTML=`<div class="toolbar"><div><h2>Pengguna</h2><p>${rows.length} akun ditemukan.</p></div><input class="control-search" id="user-search" placeholder="Cari nama, username, sekolah…"></div><div class="data-table" id="user-table">${rows.map(u=>`<div class="data-row"><div class="row-main"><div class="avatar-mini">${u.avatar_url?`<img src="${esc(u.avatar_url)}" alt="">`:esc(window.SYKA_UTILS.initials(u.full_name))}</div><div><strong>${esc(u.full_name||u.username||'Tanpa nama')}</strong><small>@${esc(u.username||'—')} · ${esc(u.institution||'—')} · ${esc(u.grade||'—')}</small><div class="chip-row">${u.roles.map(r=>`<span class="chip">${esc(r.role)}</span>`).join('')}<span class="status-pill ${window.SYKA_UTILS.statusClass(u.status)}">${esc(u.status)}</span></div></div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-user-status="${u.id}" data-status="${u.status==='ACTIVE'?'SUSPENDED':'ACTIVE'}">${u.status==='ACTIVE'?'Suspend':'Aktifkan'}</button><button class="btn btn-secondary btn-sm" data-user-role="${u.id}">Role</button></div></div>`).join('')}</div>`;document.getElementById('user-search').oninput=e=>{const q=e.target.value.toLowerCase();root.querySelectorAll('.data-row').forEach(r=>r.style.display=r.innerText.toLowerCase().includes(q)?'flex':'none');};root.querySelectorAll('[data-user-status]').forEach(b=>b.onclick=async()=>{try{await svc().setUserStatus(b.dataset.userStatus,b.dataset.status,'Perubahan admin');window.SYKA_TOAST.show('Status pengguna diperbarui.','success');render(root);}catch(error){window.SYKA_TOAST.show(error.message,'error');}});root.querySelectorAll('[data-user-role]').forEach(b=>roleModal(b.dataset.userRole));}
   function roleModal(userId){window.SYKA_MODAL.open({title:'Kelola role pengguna',html:`<form id="role-form" class="form-card"><label>Role<select id="role"><option value="student">Pelajar</option><option value="teacher">Guru</option><option value="organizer_member">Penyelenggara</option><option value="admin">Admin</option></select></label><label class="checkline"><input id="active" type="checkbox" checked> Role aktif</label><label>Alasan<textarea id="reason" rows="3" placeholder="Alasan perubahan role"></textarea></label><button class="btn btn-primary">Simpan</button><div id="role-feedback"></div></form>`,onOpen:body=>body.querySelector('#role-form').onsubmit=async e=>{e.preventDefault();try{await svc().setUserRole(userId,body.querySelector('#role').value,body.querySelector('#active').checked,body.querySelector('#reason').value);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Role diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(error){body.querySelector('#role-feedback').innerHTML=`<div class="inline-error">${esc(error.message)}</div>`;}}});}
@@ -660,7 +793,49 @@ window.SYKA_PAGE_ORDERS={render};})();
   async function certificates(root){const rows=await svc().listCertificates();root.innerHTML=`<div class="toolbar"><div><h2>Sertifikat</h2><p>Lifecycle: Generated → Review → Approved → Published → Revoked.</p></div></div><div class="data-table">${rows.map(r=>`<div class="data-row"><div><strong>${esc(r.user_id)}</strong><small>${esc(r.competition_id||'')} · revisi ${r.current_revision}</small></div><div class="row-actions">${['GENERATED','REVIEW','APPROVED','PUBLISHED','REVOKED'].map(s=>`<button class="btn btn-ghost btn-xs" data-cert="${r.id}" data-status="${s}">${s}</button>`).join('')}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada sertifikat',text:'Sertifikat akan muncul setelah award/hasil diproses.'})}</div>`;root.querySelectorAll('[data-cert]').forEach(b=>b.onclick=async()=>{try{await svc().updateCertificate(b.dataset.cert,b.dataset.status);window.SYKA_TOAST.show('Status sertifikat diperbarui.','success');render(root);}catch(error){window.SYKA_TOAST.show(error.message,'error');}});}
   async function orders(root){const rows=await svc().listOrders({});root.innerHTML=`<div class="toolbar"><div><h2>Pesanan</h2><p>Payment status dianggap final setelah webhook provider.</p></div></div><div class="data-table">${rows.map(o=>`<div class="data-row"><div><strong>#${esc(String(o.id).slice(0,8))}</strong><small>${esc(o.user_id)} · ${fmt(o.created_at)}</small></div><div class="row-actions"><span class="status-pill ${window.SYKA_UTILS.statusClass(o.status)}">${esc(o.status||'DRAFT')}</span><select class="compact-select" data-order="${o.id}">${['DRAFT','PENDING_PAYMENT','PAID','PROCESSING','SHIPPED','COMPLETED','REFUNDED','CANCELLED'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada order',text:'Order peserta akan masuk di sini saat commerce aktif.'})}</div>`;root.querySelectorAll('[data-order]').forEach(s=>s.onchange=async()=>{try{await svc().updateOrder(s.dataset.order,s.value);window.SYKA_TOAST.show('Pesanan diperbarui.','success');}catch(error){window.SYKA_TOAST.show(error.message,'error');}});}
   async function moderation(root){const m=await svc().listModeration();root.innerHTML=`<div class="control-grid-2"><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">POSTS</span><h2>Moderasi posting</h2></div></div>${m.posts.map(p=>`<div class="data-row compact"><div><strong>${esc(p.title||'Untitled')}</strong><small>${fmt(p.created_at)}</small></div><select class="compact-select" data-post="${p.id}">${['PUBLISHED','HIDDEN','ARCHIVED'].map(s=>`<option ${s===p.status?'selected':''}>${s}</option>`).join('')}</select></div>`).join('')||'<p class="muted">Tidak ada post.</p>'}</section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">COMMENTS</span><h2>Moderasi komentar</h2></div></div>${m.comments.map(c=>`<div class="data-row compact"><div><strong>${esc(c.body).slice(0,90)}</strong><small>${fmt(c.created_at)}</small></div><select class="compact-select" data-comment="${c.id}">${['PUBLISHED','HIDDEN','QUARANTINED'].map(s=>`<option ${s===c.moderation_state?'selected':''}>${s}</option>`).join('')}</select></div>`).join('')||'<p class="muted">Tidak ada komentar.</p>'}</section></div>`;root.querySelectorAll('[data-post]').forEach(s=>s.onchange=async()=>{try{await svc().moderatePost(s.dataset.post,s.value);window.SYKA_TOAST.show('Post dimoderasi.','success');}catch(error){window.SYKA_TOAST.show(error.message,'error');}});root.querySelectorAll('[data-comment]').forEach(s=>s.onchange=async()=>{try{await svc().moderateComment(s.dataset.comment,s.value);window.SYKA_TOAST.show('Komentar dimoderasi.','success');}catch(error){window.SYKA_TOAST.show(error.message,'error');}});}
-  async function plans(root){const[plans,ents]=await Promise.all([svc().listPlans(),svc().listEntitlements()]);root.innerHTML=`<div class="control-grid-2"><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">PLANS</span><h2>Organizer plans</h2></div></div>${plans.map(p=>`<div class="data-row"><div><strong>${esc(p.plan_code)}</strong><small>${esc(p.organizer_id)} · ${fmt(p.starts_at)}</small></div><span class="chip">${p.is_active?'ACTIVE':'INACTIVE'}</span></div>`).join('')||'<p class="muted">Belum ada plan aktif.</p>'}</section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">ENTITLEMENT</span><h2>Capability</h2></div><button class="btn btn-primary btn-sm" id="new-ent">+ Tambah</button></div>${ents.map(e=>`<div class="data-row"><div><strong>${esc(e.plan_code)} · ${esc(e.capability)}</strong><small>Limit ${e.limit_value??'—'}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement.</p>'}</section></div>`;document.getElementById('new-ent').onclick=()=>window.SYKA_MODAL.open({title:'Plan entitlement',html:`<form id="ent" class="form-card"><label>Plan<select id="plan"><option>FREE</option><option>PRO</option><option>PREMIUM</option></select></label><label>Capability<input id="cap" required placeholder="competition_publish"></label><label>Limit<input id="limit" type="number"></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:b=>b.querySelector('#ent').onsubmit=async e=>{e.preventDefault();try{await svc().saveEntitlement({plan_code:b.querySelector('#plan').value,capability:b.querySelector('#cap').value.trim(),limit_value:b.querySelector('#limit').value?Number(b.querySelector('#limit').value):null,config:{}});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Entitlement tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
+  const PLAN_FEATURES=[
+    {key:'competition_create',label:'Buat kompetisi',help:'Jumlah kompetisi yang dapat dibuat',kind:'limit',defaultLimit:1},
+    {key:'participant_limit',label:'Batas peserta',help:'Maksimum peserta per kompetisi',kind:'limit',defaultLimit:50},
+    {key:'question_bank',label:'Bank soal',help:'Jumlah bank soal yang dapat dikelola',kind:'limit',defaultLimit:1},
+    {key:'question_limit',label:'Batas soal',help:'Maksimum soal yang tersedia',kind:'limit',defaultLimit:100},
+    {key:'manual_grading',label:'Penilaian manual',help:'Essay / file dapat dinilai manual',kind:'toggle'},
+    {key:'certificate',label:'Sertifikat',help:'Generate dan publish certificate',kind:'toggle'},
+    {key:'twibbon',label:'Twibbon',help:'Template dan review twibbon',kind:'toggle'},
+    {key:'analytics',label:'Analytics',help:'Insight kompetisi dan peserta',kind:'toggle'},
+    {key:'advanced_reports',label:'Laporan lanjutan',help:'Export dan laporan operasional lebih lengkap',kind:'toggle'},
+    {key:'bulk_notification',label:'Notifikasi massal',help:'Kirim pengumuman ke banyak peserta',kind:'toggle'},
+    {key:'custom_branding',label:'Branding khusus',help:'Logo, warna, dan identitas organizer',kind:'toggle'},
+    {key:'priority_support',label:'Priority support',help:'Dukungan prioritas',kind:'toggle'}
+  ];
+  async function plans(root){
+    const [catalog,ents]=await Promise.all([svc().listPlanCatalog(),svc().listEntitlements()]);
+    const fallback={FREE:{name:'Free',badge:'Mulai',description:'Untuk penyelenggara yang baru mulai.',monthly_price:0,yearly_price:0,is_active:true},PREMIUM:{name:'Premium',badge:'Populer',description:'Untuk penyelenggara aktif.',monthly_price:149000,yearly_price:1490000,is_active:true},PRO:{name:'Pro',badge:'Paling lengkap',description:'Untuk organizer skala besar.',monthly_price:349000,yearly_price:3490000,is_active:true}};
+    const byCode=Object.fromEntries((catalog||[]).map(p=>[p.plan_code,p]));
+    const entitlementByPlan={};(ents||[]).forEach(e=>((entitlementByPlan[e.plan_code]??=[]).push(e)));
+    let selected='PREMIUM';
+    const planCard=(code)=>{const p=byCode[code]||{plan_code:code,...fallback[code]};const count=(entitlementByPlan[code]||[]).length;return `<button type="button" class="plan-preset-card ${selected===code?'selected':''}" data-plan-preset="${code}"><div class="plan-preset-top"><span class="plan-badge ${code.toLowerCase()}">${esc(p.badge||code)}</span><span class="chip">${p.is_active?'AKTIF':'NONAKTIF'}</span></div><h3>${esc(p.name||code)}</h3><p>${esc(p.description||'')}</p><strong>${p.monthly_price?money(p.monthly_price)+'/bulan':'Gratis'}</strong><small>${count} capability aktif</small></button>`;};
+    const renderEditor=()=>{const p=byCode[selected]||{plan_code:selected,...fallback[selected]};const current=Object.fromEntries((entitlementByPlan[selected]||[]).map(e=>[e.capability,e]));const cards=PLAN_FEATURES.map(f=>{const e=current[f.key];const checked=!!e;return `<label class="plan-feature-row"><span class="check-wrap"><input type="checkbox" data-cap="${f.key}" ${checked?'checked':''}></span><span class="plan-feature-copy"><strong>${esc(f.label)}</strong><small>${esc(f.help)}</small></span>${f.kind==='limit'?`<span class="plan-limit"><input type="number" min="0" step="1" data-limit="${f.key}" value="${e?.limit_value??f.defaultLimit??''}" ${checked?'':'disabled'} placeholder="∞"></span>`:`<span class="plan-enabled-dot">${checked?'ON':'OFF'}</span>`}</label>`}).join('');const editor=document.getElementById('plan-editor');editor.innerHTML=`<div class="plan-editor-head"><div><span class="eyebrow">PLAN BUILDER</span><h2>${esc(p.name||selected)}</h2><p>Pilih kemampuan dengan checkbox. Limit hanya perlu diisi pada fitur kuota.</p></div><div class="plan-editor-price"><label>Harga / bulan<input id="plan-monthly" type="number" min="0" value="${Number(p.monthly_price)||0}"></label><label>Harga / tahun<input id="plan-yearly" type="number" min="0" value="${Number(p.yearly_price)||0}"></label></div></div><div class="form-grid-2 plan-meta-grid"><label>Nama paket<input id="plan-name" value="${esc(p.name||selected)}"></label><label>Badge<input id="plan-badge" value="${esc(p.badge||'')}"></label><label class="span-2">Deskripsi<textarea id="plan-description" rows="2">${esc(p.description||'')}</textarea></label></div><div class="plan-feature-list">${cards}</div><div class="plan-editor-actions"><label class="switch-line"><input id="plan-active" type="checkbox" ${p.is_active!==false?'checked':''}><span>Plan aktif dan boleh dipakai</span></label><button class="btn btn-primary" id="save-plan-bundle">Simpan paket ${esc(selected)}</button></div>`;editor.querySelectorAll('[data-cap]').forEach(cb=>cb.onchange=()=>{const limit=editor.querySelector(`[data-limit="${cb.dataset.cap}"]`);if(limit)limit.disabled=!cb.checked;});editor.querySelector('#save-plan-bundle').onclick=async()=>{const ent=PLAN_FEATURES.flatMap(f=>{const cb=editor.querySelector(`[data-cap="${f.key}"]`);if(!cb?.checked)return[];const limitEl=editor.querySelector(`[data-limit="${f.key}"]`);return[{capability:f.key,limit_value:f.kind==='limit'?(limitEl.value===''?null:Number(limitEl.value)):1,config:{}}];});const btn=editor.querySelector('#save-plan-bundle');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Menyimpan…';try{await svc().savePlanBundle({plan_code:selected,name:editor.querySelector('#plan-name').value.trim(),badge:editor.querySelector('#plan-badge').value.trim(),description:editor.querySelector('#plan-description').value.trim(),monthly_price:editor.querySelector('#plan-monthly').value,yearly_price:editor.querySelector('#plan-yearly').value,is_active:editor.querySelector('#plan-active').checked,entitlements:ent});window.SYKA_TOAST.show(`Paket ${selected} berhasil diperbarui.`,'success');window.SYKA_ROUTER.refresh();}catch(error){window.SYKA_TOAST.show(error.message||'Paket gagal disimpan.','error');btn.disabled=false;btn.textContent=`Simpan paket ${selected}`;}};};
+    root.innerHTML=`<div class="plans-page"><div class="toolbar"><div><h2>Paket Penyelenggara</h2><p>Kelola Free, Premium, dan Pro tanpa mengetik capability satu per satu.</p></div></div><div class="plan-preset-grid">${['FREE','PREMIUM','PRO'].map(planCard).join('')}</div><section class="panel-card plan-builder-card" id="plan-editor"></section><section class="panel-card plan-guide"><div class="panel-head"><div><span class="eyebrow">CARA KERJA</span><h3>Capability yang mudah dipahami</h3></div></div><div class="guide-grid">${PLAN_FEATURES.map(f=>`<div><strong>${esc(f.label)}</strong><small>${esc(f.help)}</small></div>`).join('')}</div></section></div>`;
+    root.querySelectorAll('[data-plan-preset]').forEach(b=>b.onclick=()=>{selected=b.dataset.planPreset;root.querySelectorAll('[data-plan-preset]').forEach(x=>x.classList.toggle('selected',x===b));renderEditor();});
+    renderEditor();
+  }
+  function money(v){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(v)||0);}
+  async function monetization(root){
+    const products=await svc().listCommerceProducts({admin:true});
+    const benefits={};
+    await Promise.all(products.map(async p=>{benefits[p.id]=await svc().listCommerceBenefits(p.id);}));
+    const audienceLabels={student:'Pelajar',teacher:'Guru',organizer:'Penyelenggara'};
+    const typeLabels={EDU_COIN_TOPUP:'Koin Edu',FEATURE_UNLOCK:'Fitur',DIGITAL_ITEM:'Item digital',DONATION:'Donasi',PLAN:'Paket'};
+    root.innerHTML=`<div class="toolbar"><div><h2>Monetisasi &amp; Katalog</h2><p>Atur apa yang boleh tampil untuk Pelajar, Guru, dan Penyelenggara. Semua item pembayaran tetap menunggu verifikasi webhook backend.</p></div><button class="btn btn-primary" id="new-product">+ Produk baru</button></div><div class="catalog-notice"><strong>Arsitektur siap untuk 3 audience</strong><span>Pelajar · Guru · Penyelenggara</span><small>Gunakan katalog ini untuk Koin Edu, fitur khusus, item digital, donasi, dan paket.</small></div><div class="data-table catalog-table">${products.map(p=>`<div class="data-row product-admin-row"><div class="product-admin-info"><div class="store-icon">${p.product_type==='DONATION'?'♥':p.product_type==='EDU_COIN_TOPUP'?'✦':'◆'}</div><div><strong>${esc(p.name)}</strong><small>${esc(p.code)} · ${esc(typeLabels[p.product_type]||p.product_type)}</small><div class="audience-chips">${(p.audiences||[]).map(a=>`<span class="chip">${audienceLabels[a]||a}</span>`).join('')}</div></div></div><div class="product-admin-meta"><span class="status-pill ${p.is_active?'status-success':'status-muted'}">${p.is_active?'ACTIVE':'DRAFT'}</span><strong>${money(p.price)}</strong><div class="row-actions"><button class="btn btn-ghost btn-xs" data-edit-product="${p.id}">Edit</button><button class="btn btn-ghost btn-xs" data-toggle-product="${p.id}" data-active="${p.is_active?'false':'true'}">${p.is_active?'Nonaktifkan':'Aktifkan'}</button></div></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Katalog masih kosong',text:'Buat produk pertama untuk mulai mengatur monetisasi.'})}</div>`;
+    document.getElementById('new-product').onclick=()=>openProductModal();
+    root.querySelectorAll('[data-edit-product]').forEach(b=>b.onclick=()=>openProductModal(products.find(p=>p.id===b.dataset.editProduct),benefits[b.dataset.editProduct]||[]));
+    root.querySelectorAll('[data-toggle-product]').forEach(b=>b.onclick=async()=>{const product=products.find(p=>p.id===b.dataset.toggleProduct);try{await svc().saveCommerceProduct({...product,is_active:b.dataset.active==='true'},product.id);window.SYKA_TOAST.show('Status produk diperbarui.','success');render(root);}catch(error){window.SYKA_TOAST.show(error.message,'error');}});
+
+    function openProductModal(product=null,existingBenefits=[]){
+      const isEdit=!!product;const audiences=product?.audiences||[];const benefit=existingBenefits[0]||{};
+      window.SYKA_MODAL.open({title:isEdit?'Edit produk':'Produk baru',wide:true,html:`<form id="product-form" class="form-card"><div class="form-grid-2"><label>Nama produk *<input id="pr-name" required value="${esc(product?.name||'')}"></label><label>Kode *<input id="pr-code" required value="${esc(product?.code||'')}" ${isEdit?'readonly':''}></label></div><div class="form-grid-2"><label>Slug *<input id="pr-slug" required value="${esc(product?.slug||'')}"></label><label>Tipe *<select id="pr-type">${Object.entries(typeLabels).map(([v,l])=>`<option value="${v}" ${product?.product_type===v?'selected':''}>${l}</option>`).join('')}</select></label></div><label>Deskripsi singkat<textarea id="pr-short" rows="2">${esc(product?.short_description||'')}</textarea></label><label>Deskripsi lengkap<textarea id="pr-desc" rows="4">${esc(product?.description||'')}</textarea></label><div class="form-grid-2"><label>Harga (IDR) *<input id="pr-price" type="number" min="0" step="1000" required value="${Number(product?.price)||0}"></label><label>Urutan tampil<input id="pr-order" type="number" min="0" value="${Number(product?.sort_order)||0}"></label></div><fieldset class="check-group"><legend>Tampilkan untuk</legend>${[['student','Pelajar'],['teacher','Guru'],['organizer','Penyelenggara']].map(([v,l])=>`<label class="check-option"><input type="checkbox" data-audience="${v}" ${audiences.includes(v)?'checked':''}><span>${l}</span></label>`).join('')}</fieldset><fieldset class="check-group"><legend>Benefit produk</legend><div class="form-grid-2"><label>Benefit type<select id="pr-benefit-type"><option value="EDU_COIN" ${benefit.benefit_type==='EDU_COIN'?'selected':''}>Koin Edu</option><option value="FEATURE" ${benefit.benefit_type==='FEATURE'?'selected':''}>Feature unlock</option><option value="ITEM" ${benefit.benefit_type==='ITEM'?'selected':''}>Item digital</option><option value="PLAN" ${benefit.benefit_type==='PLAN'?'selected':''}>Plan</option></select></label><label>Benefit key<input id="pr-benefit-key" value="${esc(benefit.benefit_key||product?.metadata?.feature||'')}"></label><label>Jumlah<input id="pr-benefit-qty" type="number" min="0" value="${benefit.quantity??product?.metadata?.coin_amount??''}"></label><label>Durasi (hari)<input id="pr-benefit-days" type="number" min="0" value="${benefit.duration_days??product?.metadata?.duration_days??''}"></label></div></fieldset><div class="form-grid-2"><label>Image URL<input id="pr-image" type="url" value="${esc(product?.image_url||'')}"></label><label>Cloudinary public ID<input id="pr-public-id" value="${esc(product?.public_id||'')}"></label></div><label class="switch-line"><input id="pr-featured" type="checkbox" ${product?.is_featured?'checked':''}><span>Tampilkan sebagai produk unggulan</span></label><label class="switch-line"><input id="pr-active" type="checkbox" ${product?.is_active?'checked':''}><span>Produk aktif dan tampil di katalog</span></label><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batalkan</button><button class="btn btn-primary" type="submit">${isEdit?'Simpan perubahan':'Buat produk'}</button></div></form>`,onOpen:b=>{b.querySelector('[data-close]').onclick=()=>window.SYKA_MODAL.close();b.querySelector('#product-form').onsubmit=async e=>{e.preventDefault();const audiences=[...b.querySelectorAll('[data-audience]:checked')].map(x=>x.dataset.audience);if(!audiences.length){window.SYKA_TOAST.show('Pilih minimal satu audience.','error');return;}const payload={code:b.querySelector('#pr-code').value.trim().toUpperCase(),slug:b.querySelector('#pr-slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-'),name:b.querySelector('#pr-name').value.trim(),short_description:b.querySelector('#pr-short').value.trim()||null,description:b.querySelector('#pr-desc').value.trim()||null,product_type:b.querySelector('#pr-type').value,audiences,price:Number(b.querySelector('#pr-price').value)||0,currency:'IDR',image_url:b.querySelector('#pr-image').value.trim()||null,public_id:b.querySelector('#pr-public-id').value.trim()||null,is_active:b.querySelector('#pr-active').checked,is_featured:b.querySelector('#pr-featured').checked,sort_order:Number(b.querySelector('#pr-order').value)||0,metadata:{}};try{const saved=await svc().saveCommerceProduct(payload,product?.id||null);const benefits=[];const btype=b.querySelector('#pr-benefit-type').value;const bkey=b.querySelector('#pr-benefit-key').value.trim()||null;const qty=b.querySelector('#pr-benefit-qty').value===''?null:Number(b.querySelector('#pr-benefit-qty').value);const days=b.querySelector('#pr-benefit-days').value===''?null:Number(b.querySelector('#pr-benefit-days').value);if(btype)benefits.push({benefit_type:btype,benefit_key:bkey,quantity:qty,duration_days:days,config:{}});await svc().replaceCommerceBenefits(saved.id,benefits);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Produk tersimpan.','success');render(root);}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message||'Produk gagal disimpan.')}</div>`);}};}});
+    }
+  }
   async function settings(root){const[flags,settings]=await Promise.all([svc().listFlags(),svc().listSettings()]);root.innerHTML=`<div class="control-grid-2"><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">FLAGS</span><h2>Feature flags</h2></div></div>${flags.map(f=>`<div class="data-row"><div><strong>${esc(f.key)}</strong><small>${f.enabled?'Enabled':'Disabled'}</small></div><button class="btn btn-ghost btn-sm" data-flag="${esc(f.key)}" data-enabled="${!f.enabled}">${f.enabled?'Matikan':'Nyalakan'}</button></div>`).join('')||'<p class="muted">Belum ada flag.</p>'}</section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">GLOBAL SETTINGS</span><h2>Pengaturan</h2></div></div>${settings.map(s=>`<div class="data-row"><div><strong>${esc(s.key)}</strong><small>${esc(JSON.stringify(s.value))}</small></div><button class="btn btn-ghost btn-sm" data-setting="${esc(s.key)}">Edit</button></div>`).join('')||'<p class="muted">Belum ada setting.</p>'}</section></div>`;root.querySelectorAll('[data-flag]').forEach(b=>b.onclick=async()=>{try{await svc().setFlag(b.dataset.flag,b.dataset.enabled==='true',{});window.SYKA_TOAST.show('Feature flag diperbarui.','success');render(root);}catch(error){window.SYKA_TOAST.show(error.message,'error');}});root.querySelectorAll('[data-setting]').forEach(b=>b.onclick=()=>settingModal(b.dataset.setting));}
   function settingModal(key){window.SYKA_MODAL.open({title:'Global setting',html:`<form id="sf" class="form-card"><label>Key<input id="key" value="${esc(key)}" required></label><label>Value JSON<textarea id="value">{}</textarea></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:b=>b.querySelector('#sf').onsubmit=async e=>{e.preventDefault();try{await svc().setSetting(b.querySelector('#key').value.trim(),JSON.parse(b.querySelector('#value').value||'{}'));window.SYKA_MODAL.close();window.SYKA_TOAST.show('Setting tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
   async function audit(root){const rows=await svc().listAudit({limit:200});root.innerHTML=`<div class="toolbar"><div><h2>Audit Log</h2><p>Catatan mutation privileged dan perubahan state.</p></div><input id="audit-search" class="control-search" placeholder="Cari action, entity…"></div><div class="data-table" id="audit-table">${rows.map(a=>`<div class="data-row compact"><div><strong>${esc(a.action)}</strong><small>${esc(a.entity_type)} · ${esc(a.entity_id||'')} · ${esc(a.reason||'')}</small></div><time>${fmt(a.created_at)}</time></div>`).join('')||window.SYKA_EMPTY.render({title:'Audit kosong',text:'Belum ada mutation privileged.'})}</div>`;document.getElementById('audit-search').oninput=e=>{const q=e.target.value.toLowerCase();root.querySelectorAll('.data-row').forEach(r=>r.style.display=r.innerText.toLowerCase().includes(q)?'flex':'none');};}
@@ -743,6 +918,7 @@ window.SYKA_PAGE_ORDERS={render};})();
     {name:'awards',match:p=>p==='/prestasi'},
     {name:'profile',match:p=>p==='/profile'},
     {name:'orders',match:p=>p==='/pesanan'},
+    {name:'store',match:p=>p==='/toko'||p==='/shop'},
     {name:'organizer',match:p=>p==='/organizer'},
     {name:'admin',match:p=>p==='/admin'},
     {name:'verify',match:p=>/^\/verifikasi\/[^/]+$/.test(p)},
@@ -773,6 +949,7 @@ window.SYKA_PAGE_ORDERS={render};})();
       if(parsed.name==='leaderboard')return await window.SYKA_PAGE_LEADERBOARD.render(root);
       if(parsed.name==='awards')return await window.SYKA_PAGE_AWARDS.render(root);
       if(parsed.name==='orders')return await window.SYKA_PAGE_ORDERS.render(root);
+      if(parsed.name==='store')return await window.SYKA_PAGE_STORE.render(root);
       if(parsed.name==='verify')return await window.SYKA_PAGE_VERIFY.render(root,parsed.params.code);
       if(parsed.name==='organizer')return await window.SYKA_PAGE_ORGANIZER.render(root);
       if(parsed.name==='admin')return await window.SYKA_PAGE_ADMIN.render(root);

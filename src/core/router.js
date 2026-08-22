@@ -9,6 +9,7 @@
     {name:'awards',match:p=>p==='/prestasi'},
     {name:'profile',match:p=>p==='/profile'},
     {name:'orders',match:p=>p==='/pesanan'},
+    {name:'store',match:p=>p==='/toko'||p==='/shop'},
     {name:'organizer',match:p=>p==='/organizer'},
     {name:'admin',match:p=>p==='/admin'},
     {name:'verify',match:p=>/^\/verifikasi\/[^/]+$/.test(p)},
@@ -39,6 +40,7 @@
       if(parsed.name==='leaderboard')return await window.SYKA_PAGE_LEADERBOARD.render(root);
       if(parsed.name==='awards')return await window.SYKA_PAGE_AWARDS.render(root);
       if(parsed.name==='orders')return await window.SYKA_PAGE_ORDERS.render(root);
+      if(parsed.name==='store')return await window.SYKA_PAGE_STORE.render(root);
       if(parsed.name==='verify')return await window.SYKA_PAGE_VERIFY.render(root,parsed.params.code);
       if(parsed.name==='organizer')return await window.SYKA_PAGE_ORGANIZER.render(root);
       if(parsed.name==='admin')return await window.SYKA_PAGE_ADMIN.render(root);
