@@ -1,4 +1,4 @@
-# Sykabelajar Frontend v4.6.2 — Production Polish
+# Sykabelajar Frontend v4.6.1 — Production Polish
 
 Baseline frontend for `sykabelajar.id` using Blogger as the application shell, Supabase as source of truth, and Cloudinary for media.
 
@@ -37,3 +37,10 @@ Run backend migrations 0005 and 0006 in order (0005 only when not already applie
 - Supabase publishable key may be bundled client-side, but RLS remains mandatory.
 - Never put service-role keys, Cloudinary API secrets, payment credentials, or webhook secrets in GitHub/frontend.
 - Paid plan/product benefits activate only after server-side/manual payment verification.
+
+
+## v4.6.3 hotfix
+- Admin assignment plan template fixed.
+- Admin audit tab restored.
+- Utility functions required by control plane restored.
+- All source JavaScript syntax checked with `node --check`.

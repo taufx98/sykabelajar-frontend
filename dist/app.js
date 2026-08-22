@@ -3,7 +3,7 @@
   const existing = window.SYKA_CONFIG || {};
   window.SYKA_CONFIG = Object.freeze({
     APP_NAME: 'Sykabelajar.id',
-    APP_VERSION: '4.6.2-plan-upgrade-only',
+    APP_VERSION: '4.6.1-production-polish',
     ROUTE_MODE: existing.ROUTE_MODE || 'query',
     APP_PAGE: existing.APP_PAGE || '/p/app.html',
     ASSET_BASE_URL: existing.ASSET_BASE_URL || './dist',
@@ -86,249 +86,40 @@
 
 
 /* src/lib/utils.js */
-(function () {
-  function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, c => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    }[c]));
+(function(){
+  const APP_PAGE_FALLBACK='/p/app.html';
+  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function initials(name){return (String(name||'U').trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('')||'U').toUpperCase();}
+  function formatNumber(value){return Number(value||0).toLocaleString('id-ID');}
+  function formatDate(value,opts={}){
+    if(!value)return '—';const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+    return new Intl.DateTimeFormat('id-ID',{day:'2-digit',month:'short',year:'numeric',...opts}).format(d);
   }
-
-  function formatDate(value) {
-    if (!value) return '—';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    }).format(d);
-  }
-
-  function formatDateTime(value) {
-    if (!value) return '—';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '—';
-
-    return new Intl.DateTimeFormat('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(d);
-  }
-
-  function formatNumber(value) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return '0';
-    return new Intl.NumberFormat('id-ID').format(n);
-  }
-
-  function statusClass(status) {
-    const s = String(status || '').toUpperCase();
-
-    if ([
-      'ACTIVE',
-      'APPROVED',
-      'PUBLISHED',
-      'REGISTRATION_OPEN',
-      'LIVE',
-      'PAID',
-      'COMPLETED',
-      'FINALIZED',
-      'ENABLED',
-      'SUCCESS'
-    ].includes(s)) {
-      return 'status-success';
+  function formatTime(value){if(!value)return '—';const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';return new Intl.DateTimeFormat('id-ID',{hour:'2-digit',minute:'2-digit'}).format(d);}
+  function formatDateTime(value){if(!value)return '—';const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';return `${formatDate(d)} · ${formatTime(d)}`;}
+  function toLocalInputValue(value){if(!value)return '';const d=new Date(value);if(Number.isNaN(d.getTime()))return '';const pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;}
+  function localInputToISO(value){if(!value)return null;const d=new Date(value);return Number.isNaN(d.getTime())?null:d.toISOString();}
+  function dateTimeParts(value){const d=value?new Date(value):new Date();if(Number.isNaN(d.getTime())){const n=new Date();return {year:n.getFullYear(),month:n.getMonth()+1,day:n.getDate(),hour:9,minute:0};}return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:d.getHours(),minute:d.getMinutes()};}
+  function readDateTimeField(prefix,root=document){const q=s=>root.querySelector(s)?.value;const y=q(`[data-dt-year="${prefix}"]`),m=q(`[data-dt-month="${prefix}"]`),d=q(`[data-dt-day="${prefix}"]`),h=q(`[data-dt-hour="${prefix}"]`),mi=q(`[data-dt-minute="${prefix}"]`);if(!y||!m||!d||h===undefined||mi===undefined)return null;const dt=new Date(Number(y),Number(m)-1,Number(d),Number(h),Number(mi),0,0);return Number.isNaN(dt.getTime())?null:dt.toISOString();}
+  function debounce(fn,wait){let t=null;return(...args)=>{clearTimeout(t);t=setTimeout(()=>fn(...args),wait);};}
+  function routePath(){
+    const url=new URL(window.location.href);const appPage=window.SYKA_CONFIG?.APP_PAGE||APP_PAGE_FALLBACK;
+    const explicit=url.searchParams.get('route');if(explicit)return explicit;
+    if(window.location.hash?.startsWith('#/'))return window.location.hash.slice(1);
+    if(url.pathname===appPage){
+      const tab=(url.searchParams.get('tab')||'').toLowerCase();
+      const aliases={competitions:'/lomba',competition:'/lomba',lomba:'/lomba',ranking:'/juara',leaderboard:'/juara',juara:'/juara',awards:'/prestasi',achievement:'/prestasi',prestasi:'/prestasi',profile:'/profile',profil:'/profile',orders:'/pesanan',order:'/pesanan',pesanan:'/pesanan',store:'/toko',shop:'/toko',toko:'/toko',organizer:'/organizer',penyelenggara:'/organizer',admin:'/admin'};
+      return aliases[tab]||'/';
     }
-
-    if ([
-      'PENDING',
-      'PENDING_PAYMENT',
-      'REVIEW',
-      'GRADING',
-      'PROCESSING',
-      'REGISTRATION_CLOSED',
-      'SUBMISSION_CLOSED',
-      'DRAFT'
-    ].includes(s)) {
-      return 'status-warning';
-    }
-
-    if ([
-      'REJECTED',
-      'CANCELLED',
-      'SUSPENDED',
-      'HIDDEN',
-      'ARCHIVED',
-      'REVOKED',
-      'FAILED',
-      'DISABLED'
-    ].includes(s)) {
-      return 'status-danger';
-    }
-
-    return 'status-neutral';
+    return url.pathname||'/';
   }
-
-  function initials(name) {
-    return (
-      String(name || 'U')
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map(x => x[0])
-        .join('') || 'U'
-    ).toUpperCase();
-  }
-
-  function debounce(fn, wait) {
-    let timer = null;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), wait);
-    };
-  }
-
-  function routePath() {
-    const url = new URL(window.location.href);
-    const configuredAppPage =
-      window.SYKA_CONFIG?.APP_PAGE || '/p/app.html';
-
-    const explicitRoute = url.searchParams.get('route');
-    if (explicitRoute) return explicitRoute;
-
-    if (
-      window.location.hash &&
-      window.location.hash.startsWith('#/')
-    ) {
-      return window.location.hash.slice(1);
-    }
-
-    if (url.pathname === configuredAppPage) {
-      const tab = (url.searchParams.get('tab') || '').toLowerCase();
-
-      const aliases = {
-        competitions: '/lomba',
-        competition: '/lomba',
-        lomba: '/lomba',
-        ranking: '/juara',
-        leaderboard: '/juara',
-        juara: '/juara',
-        awards: '/prestasi',
-        achievement: '/prestasi',
-        prestasi: '/prestasi',
-        profile: '/profile',
-        profil: '/profile',
-        orders: '/pesanan',
-        order: '/pesanan',
-        pesanan: '/pesanan',
-        organizer: '/organizer',
-        penyelenggara: '/organizer',
-        admin: '/admin'
-      };
-
-      return aliases[tab] || '/';
-    }
-
-    return url.pathname || '/';
-  }
-
-  function queryParams() {
-    const url = new URL(window.location.href);
-    const params = Object.fromEntries(url.searchParams.entries());
-    delete params.route;
-    return params;
-  }
-
-  function randomId(prefix = 'req') {
-    return prefix + '_' +
-      Math.random().toString(36).slice(2) +
-      Date.now().toString(36);
-  }
-
-  function cloudinaryTransform(url, opts = {}) {
-    if (!url || !url.includes('/upload/')) return url || '';
-
-    const parts = url.split('/upload/');
-    const trans = [];
-
-    if (opts.width) trans.push(`w_${Math.round(opts.width)}`);
-    if (opts.height) trans.push(`h_${Math.round(opts.height)}`);
-    if (opts.crop) trans.push(`c_${opts.crop}`);
-    if (opts.gravity) trans.push(`g_${opts.gravity}`);
-
-    trans.push('q_auto', 'f_auto');
-
-    return parts[0] +
-      '/upload/' +
-      trans.join(',') +
-      '/' +
-      parts[1];
-  }
-
-  function toLocalInputValue(value) {
-    if (!value) return '';
-
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '';
-
-    const pad = n => String(n).padStart(2, '0');
-
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-      `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
-  function localInputToISO(value) {
-    if (!value) return null;
-
-    const d = new Date(value);
-
-    if (Number.isNaN(d.getTime())) return null;
-
-    return d.toISOString();
-  }
-
-  function getStoredTheme() {
-    return (
-      localStorage.getItem('syka_theme') ||
-      (
-        matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-      )
-    );
-  }
-
-  function safeJson(value, fallback = null) {
-    try {
-      return JSON.parse(value);
-    } catch (_) {
-      return fallback;
-    }
-  }
-
-  window.SYKA_UTILS = {
-    escapeHtml,
-    formatDate,
-    formatDateTime,
-    formatNumber,
-    statusClass,
-    initials,
-    debounce,
-    routePath,
-    queryParams,
-    randomId,
-    cloudinaryTransform,
-    toLocalInputValue,
-    localInputToISO,
-    getStoredTheme,
-    safeJson
-  };
+  function queryParams(){const url=new URL(window.location.href);const p=Object.fromEntries(url.searchParams.entries());delete p.route;return p;}
+  function randomId(prefix='req'){return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;}
+  function cloudinaryTransform(url,opts={}){if(!url||!url.includes('/upload/'))return url||'';const [base,file]=url.split('/upload/');const t=[];if(opts.width)t.push(`w_${Math.round(opts.width)}`);if(opts.height)t.push(`h_${Math.round(opts.height)}`);if(opts.crop)t.push(`c_${opts.crop}`);if(opts.gravity)t.push(`g_${opts.gravity}`);t.push('q_auto','f_auto');return `${base}/upload/${t.join(',')}/${file}`;}
+  function getStoredTheme(){return localStorage.getItem('syka_theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}
+  function safeJson(value,fallback=null){try{return JSON.parse(value);}catch(_){return fallback;}}
+  function statusClass(status){const s=String(status||'').toUpperCase();if(['ACTIVE','APPROVED','PUBLISHED','RESULT_PUBLISHED','COMPLETED','PAID'].includes(s))return 'status-success';if(['PENDING','DRAFT','REGISTRATION_OPEN','GRADING','PROCESSING','REVIEW'].includes(s))return 'status-warning';if(['CANCELLED','REJECTED','REVOKED','SUSPENDED','FAILED'].includes(s))return 'status-danger';return 'status-neutral';}
+  window.SYKA_UTILS={escapeHtml,initials,formatNumber,formatDate,formatTime,formatDateTime,toLocalInputValue,localInputToISO,dateTimeParts,readDateTimeField,debounce,routePath,queryParams,randomId,cloudinaryTransform,getStoredTheme,safeJson,statusClass};
 })();
 
 
@@ -391,135 +182,62 @@
 
 /* src/lib/cloudinary.js */
 (function () {
-  const cache = new Map();
+  const queues = new Map();
 
   function widgetConfig(options = {}) {
     const cfg = window.SYKA_CONFIG || {};
-    const folder = options.folder || cfg.CLOUDINARY_FOLDER || 'sykabelajar/uploads';
-    const crop = options.crop || false;
     return {
       cloudName: cfg.CLOUDINARY_CLOUD_NAME,
       uploadPreset: cfg.CLOUDINARY_UPLOAD_PRESET,
-      folder,
+      folder: options.folder || cfg.CLOUDINARY_FOLDER || 'sykabelajar/uploads',
       sources: options.sources || ['local', 'camera'],
       multiple: false,
       resourceType: options.resourceType || 'image',
-      cropping: crop,
+      cropping: options.crop || false,
       croppingAspectRatio: options.croppingAspectRatio,
       maxFileSize: options.maxFileSize || 8000000,
       clientAllowedFormats: options.formats || ['png', 'jpg', 'jpeg', 'webp'],
       showAdvancedOptions: false,
-      singleUploadAutoClose: false,
-      styles: {
-        palette: {
-          window: '#ffffff',
-          windowBorder: '#e2e8f0',
-          tabIcon: '#7c3aed',
-          menuIcons: '#475569',
-          textDark: '#0f172a',
-          textLight: '#ffffff',
-          link: '#7c3aed',
-          action: '#7c3aed',
-          inactiveTabIcon: '#94a3b8',
-          error: '#dc2626',
-          inProgress: '#7c3aed',
-          complete: '#059669'
-        }
-      }
+      singleUploadAutoClose: true,
+      styles: { palette: { window:'#fff', windowBorder:'#e2e8f0', tabIcon:'#7c3aed', menuIcons:'#475569', textDark:'#0f172a', textLight:'#fff', link:'#7c3aed', action:'#7c3aed', inactiveTabIcon:'#94a3b8', error:'#dc2626', inProgress:'#7c3aed', complete:'#059669' } }
     };
   }
 
-  function openImageWidget(options = {}) {
-    const key = JSON.stringify(widgetConfig(options));
-    let widget = cache.get(key);
+  function normalizeInfo(info) {
+    if (!info || typeof info !== 'object') throw new Error('Cloudinary tidak mengembalikan informasi file.');
+    const secure_url=String(info.secure_url||'').trim();
+    if(!secure_url) throw new Error('Upload Cloudinary selesai tetapi URL file tidak tersedia.');
+    return { secure_url, public_id:info.public_id||'', original_filename:info.original_filename||info.filename||'File', width:Number(info.width)||null, height:Number(info.height)||null, version:info.version!=null?String(info.version):'', resource_type:info.resource_type||'image', format:info.format||'', bytes:Number(info.bytes)||0 };
+  }
 
-    return new Promise((resolve, reject) => {
-      if (!window.cloudinary || typeof window.cloudinary.createUploadWidget !== 'function') {
-        reject(new Error('Cloudinary Upload Widget belum dimuat.'));
-        return;
-      }
-
-      const open = () => widget.open();
-
-      if (!widget) {
-        widget = window.cloudinary.createUploadWidget(widgetConfig(options), (error, result) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          if (result?.event === 'success') {
-            resolve(result.info);
-          }
+  function openImageWidget(options={},onSuccess,onError){
+    const key=JSON.stringify(widgetConfig(options));
+    return new Promise((resolve,reject)=>{
+      if(!window.cloudinary || typeof window.cloudinary.createUploadWidget!=='function'){reject(new Error('Cloudinary Upload Widget belum dimuat.'));return;}
+      let entry=queues.get(key);
+      if(!entry){
+        entry={pending:[],widget:null};
+        entry.widget=window.cloudinary.createUploadWidget(widgetConfig(options),(error,result)=>{
+          const job=entry.pending.shift();
+          if(!job)return;
+          if(error){job.reject(error);return;}
+          if(result?.event==='success'){try{job.resolve(normalizeInfo(result.info));}catch(e){job.reject(e);}}
         });
-        cache.set(key, widget);
+        queues.set(key,entry);
       }
-
-      open();
+      entry.pending.push({resolve:info=>{onSuccess?.(info);resolve(info);},reject:error=>{onError?.(error);reject(error);}});
+      try{entry.widget.open();}catch(e){entry.pending.pop();reject(e);}
     });
   }
 
-  function openAvatarWidget(onSuccess, onError) {
-    openImageWidget({
-      folder: (window.SYKA_CONFIG?.CLOUDINARY_FOLDER || 'sykabelajar/users/profiles'),
-      crop: true,
-      croppingAspectRatio: 1,
-      maxFileSize: 5000000
-    }).then(onSuccess).catch(onError);
-  }
+  const openAvatarWidget=(s,e)=>openImageWidget({folder:(window.SYKA_CONFIG?.CLOUDINARY_FOLDER||'sykabelajar/users/profiles'),crop:true,croppingAspectRatio:1,maxFileSize:5000000},s,e);
+  const openCompetitionImageWidget=(s,e)=>openImageWidget({folder:'sykabelajar/competitions/posters',maxFileSize:10000000,crop:true,croppingAspectRatio:16/9},s,e);
+  const openPromoImageWidget=(s,e)=>openImageWidget({folder:'sykabelajar/home/promos',maxFileSize:10000000,crop:true,croppingAspectRatio:16/9},s,e);
+  const openProductImageWidget=(s,e)=>openImageWidget({folder:'sykabelajar/store/products',maxFileSize:8000000,crop:true,croppingAspectRatio:1},s,e);
+  const openPaymentProofWidget=(s,e)=>openImageWidget({folder:'sykabelajar/orders/payment-proofs',maxFileSize:8000000,crop:false},s,e);
+  const openTwibbonWidget=(s,e)=>openImageWidget({folder:'sykabelajar/competitions/twibbon',maxFileSize:10000000,crop:true,croppingAspectRatio:1},s,e);
 
-  function openCompetitionImageWidget(onSuccess, onError) {
-    openImageWidget({
-      folder: 'sykabelajar/competitions/posters',
-      maxFileSize: 10000000,
-      crop: true,
-      croppingAspectRatio: 16 / 9
-    }).then(onSuccess).catch(onError);
-  }
-
-  function openPromoImageWidget(onSuccess, onError) {
-    openImageWidget({
-      folder: 'sykabelajar/home/promos',
-      maxFileSize: 10000000,
-      crop: true,
-      croppingAspectRatio: 16 / 9
-    }).then(onSuccess).catch(onError);
-  }
-
-  function openProductImageWidget(onSuccess, onError) {
-    openImageWidget({
-      folder: 'sykabelajar/store/products',
-      maxFileSize: 8000000,
-      crop: true,
-      croppingAspectRatio: 1
-    }).then(onSuccess).catch(onError);
-  }
-
-  function openPaymentProofWidget(onSuccess, onError) {
-    openImageWidget({
-      folder: 'sykabelajar/orders/payment-proofs',
-      maxFileSize: 8000000,
-      crop: false
-    }).then(onSuccess).catch(onError);
-  }
-
-  function openTwibbonWidget(onSuccess, onError) {
-    openImageWidget({
-      folder: 'sykabelajar/competitions/twibbon',
-      maxFileSize: 10000000,
-      crop: true,
-      croppingAspectRatio: 1
-    }).then(onSuccess).catch(onError);
-  }
-
-  window.SYKA_CLOUDINARY = {
-    openImageWidget,
-    openAvatarWidget,
-    openCompetitionImageWidget,
-    openPromoImageWidget,
-    openProductImageWidget,
-    openPaymentProofWidget,
-    openTwibbonWidget
-  };
+  window.SYKA_CLOUDINARY={openImageWidget,openAvatarWidget,openCompetitionImageWidget,openPromoImageWidget,openProductImageWidget,openPaymentProofWidget,openTwibbonWidget};
 })();
 
 
@@ -1239,12 +957,23 @@ window.SYKA_PAGE_AWARDS={render};})();
   async function competitions(root){const rows=await svc().listCompetitionsAdmin({limit:250});root.innerHTML=`<div class="toolbar"><div><h2>Kompetisi</h2><p>CRUD dan state machine server-authoritative.</p></div><button class="btn btn-primary" id="new-comp">+ Kompetisi</button></div><div class="filter-line"><input class="control-search" id="comp-search" placeholder="Cari kompetisi…"><select class="compact-select" id="comp-status"><option value="">Semua status</option>${['DRAFT','PUBLISHED','REGISTRATION_OPEN','REGISTRATION_CLOSED','LIVE','SUBMISSION_CLOSED','GRADING','RESULT_PUBLISHED','ARCHIVED','SUSPENDED','CANCELLED'].map(s=>`<option>${s}</option>`).join('')}</select></div><div class="data-table" id="comp-table">${rows.map(c=>competitionRow(c)).join('')||window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi pertama untuk mulai menggunakan control plane.'})}</div>`;document.getElementById('new-comp').onclick=()=>competitionModal();const filter=()=>{const q=document.getElementById('comp-search').value.toLowerCase();const s=document.getElementById('comp-status').value;root.querySelectorAll('.data-row[data-comp-row]').forEach(r=>r.style.display=(!q||r.innerText.toLowerCase().includes(q))&&(!s||r.dataset.status===s)?'flex':'none');};document.getElementById('comp-search').oninput=filter;document.getElementById('comp-status').onchange=filter;bindCompetitionRows(root,rows);}
   function competitionRow(c){const poster=window.SYKA_UTILS.cloudinaryTransform(c.poster_url,{width:120,height:80,crop:'fill'});return `<div class="data-row competition-admin-row" data-comp-row data-status="${esc(c.status)}"><div class="row-main"><div class="media-thumb">${poster?`<img src="${esc(poster)}" alt="" loading="lazy">`:'✦'}</div><div><div class="row-title"><strong>${esc(c.title)}</strong><span class="status-pill ${window.SYKA_UTILS.statusClass(c.status)}">${esc(c.status)}</span></div><small>${esc(c.category||'Kompetisi')} · ${esc(c.slug||'')} · ${esc(c.visibility||'PUBLIC')}</small><div class="chip-row"><span class="chip">Registrasi ${fmt(c.registration_starts_at)} → ${fmt(c.registration_ends_at)}</span><span class="chip">Mulai ${fmt(c.starts_at)}</span></div></div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="${c.id}">Edit</button><button class="btn btn-secondary btn-sm" data-config="${c.id}">Config</button><button class="btn btn-primary btn-sm" data-transition="${c.id}">Transisi</button></div></div>`;}
   function bindCompetitionRows(root,rows){root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>competitionModal(rows.find(x=>x.id===b.dataset.edit)));root.querySelectorAll('[data-config]').forEach(b=>b.onclick=()=>competitionConfigModal(rows.find(x=>x.id===b.dataset.config)));root.querySelectorAll('[data-transition]').forEach(b=>b.onclick=()=>transitionModal(rows.find(x=>x.id===b.dataset.transition)));}
-  function dateField(id,label,value,required=false){return `<label>${label}${required?' *':''}<div class="date-control"><span>◷</span><input id="${id}" type="datetime-local" ${required?'required':''} value="${window.SYKA_UTILS.escapeHtml(window.SYKA_UTILS.toLocalInputValue(value))}"></div></label>`;}
+  function dateField(id,label,value,required=false){
+    const p=window.SYKA_UTILS.dateTimeParts(value);
+    const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const y0=new Date().getFullYear();
+    const years=Array.from({length:11},(_,i)=>y0-3+i);
+    const days=Array.from({length:31},(_,i)=>i+1);
+    const hours=Array.from({length:24},(_,i)=>i);
+    const minutes=[0,15,30,45];
+    const opts=(items,current,labeler=x=>String(x))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
+    return `<label class="datetime-field">${label}${required?' *':''}<div class="datetime-dropdown-grid" data-datetime-field="${id}"><select data-dt-day="${id}" aria-label="${label} tanggal">${opts(days,p.day,x=>String(x).padStart(2,'0'))}</select><select data-dt-month="${id}" aria-label="${label} bulan">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select><select data-dt-year="${id}" aria-label="${label} tahun">${opts(years,p.year)}</select><span class="datetime-separator">pukul</span><select data-dt-hour="${id}" aria-label="${label} jam">${opts(hours,p.hour,x=>String(x).padStart(2,'0'))}</select><span class="datetime-colon">:</span><select data-dt-minute="${id}" aria-label="${label} menit">${opts(minutes,p.minute,x=>String(x).padStart(2,'0'))}</select></div></label>`;
+  }
+
   async function competitionModal(current=null){
     const organizers=await svc().listOrganizers().catch(()=>[]); const p=current||{};
     window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="comp-form" class="form-card"><div class="form-section-title"><div><span class="eyebrow">BASIC INFO</span><h2>${current?'Edit':'Buat'} kompetisi</h2></div><span class="form-required">* wajib</span></div><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"><small class="field-help">Contoh: olimpiade-sains-2026</small></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option><option ${p.category==='Uji Kompetensi'?'selected':''}>Uji Kompetensi</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi dengan ringkas…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gambar langsung ke Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="admin-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="admin-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div>${!current?`<label>Organizer *<select id="organizer_id" required>${organizers.map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label>`:''}<div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2><p>Pilih tanggal dan jam lokal dengan kontrol yang mudah dibaca.</p></div></div><div class="form-grid-2">${dateField('registration_start','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('registration_end','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start_at','Kompetisi mulai',p.starts_at,true)}${dateField('end_at','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('announcement_at','Pengumuman hasil',p.announcement_at,false)}<div id="comp-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat kompetisi'}</button></div></form>`,onOpen:body=>{
-      body.querySelector('#admin-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();body.querySelector('#poster').value=info.secure_url||'';body.querySelector('#poster-public-id').value=info.public_id||'';body.querySelector('#poster-width').value=info.width||'';body.querySelector('#poster-height').value=info.height||'';body.querySelector('#poster-version').value=info.version||'';body.querySelector('#poster-resource').value=info.resource_type||'image';body.querySelector('#admin-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster kompetisi')}</strong></div>`;body.querySelector('#admin-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};
-      body.querySelector('#comp-form').onsubmit=async e=>{e.preventDefault();const feedback=body.querySelector('#comp-feedback');const payload={title:body.querySelector('#title').value.trim(),slug:body.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:body.querySelector('#category').value.trim()||'Kompetisi',short_description:body.querySelector('#short').value.trim()||null,visibility:body.querySelector('#visibility').value,poster_url:body.querySelector('#poster').value.trim()||null,poster_public_id:body.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(body.querySelector('#poster-width').value)||null,poster_height:Number(body.querySelector('#poster-height').value)||null,poster_version:body.querySelector('#poster-version').value.trim()||null,poster_resource_type:body.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.localInputToISO(body.querySelector('#registration_start').value),registration_ends_at:window.SYKA_UTILS.localInputToISO(body.querySelector('#registration_end').value),starts_at:window.SYKA_UTILS.localInputToISO(body.querySelector('#start_at').value),ends_at:window.SYKA_UTILS.localInputToISO(body.querySelector('#end_at').value),announcement_at:window.SYKA_UTILS.localInputToISO(body.querySelector('#announcement_at').value)};if(!current)payload.organizer_id=body.querySelector('#organizer_id')?.value||null;try{await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){feedback.innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};
+      body.querySelector('#admin-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();if(!info?.secure_url)throw new Error('Cloudinary tidak mengembalikan file poster.');body.querySelector('#poster').value=info.secure_url||'';body.querySelector('#poster-public-id').value=info.public_id||'';body.querySelector('#poster-width').value=info.width||'';body.querySelector('#poster-height').value=info.height||'';body.querySelector('#poster-version').value=info.version||'';body.querySelector('#poster-resource').value=info.resource_type||'image';body.querySelector('#admin-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster kompetisi')}</strong></div>`;body.querySelector('#admin-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};
+      body.querySelector('#comp-form').onsubmit=async e=>{e.preventDefault();const feedback=body.querySelector('#comp-feedback');const payload={title:body.querySelector('#title').value.trim(),slug:body.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:body.querySelector('#category').value.trim()||'Kompetisi',short_description:body.querySelector('#short').value.trim()||null,visibility:body.querySelector('#visibility').value,poster_url:body.querySelector('#poster').value.trim()||null,poster_public_id:body.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(body.querySelector('#poster-width').value)||null,poster_height:Number(body.querySelector('#poster-height').value)||null,poster_version:body.querySelector('#poster-version').value.trim()||null,poster_resource_type:body.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.readDateTimeField('registration_start', body),registration_ends_at:window.SYKA_UTILS.readDateTimeField('registration_end', body),starts_at:window.SYKA_UTILS.readDateTimeField('start_at', body),ends_at:window.SYKA_UTILS.readDateTimeField('end_at', body),announcement_at:window.SYKA_UTILS.readDateTimeField('announcement_at', body)};if(!current)payload.organizer_id=body.querySelector('#organizer_id')?.value||null;try{await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){feedback.innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};
     }});
   }
   function competitionConfigModal(c){window.SYKA_MODAL.open({title:'Konfigurasi kompetisi',wide:true,html:`<div class="config-grid"><button class="config-card" id="cfg-level"><span>◫</span><strong>Jenjang & kelas</strong><small>Atur level, allowed grades, points.</small></button><button class="config-card" id="cfg-rules"><span>◌</span><strong>Aturan pendaftaran</strong><small>Twibbon, social proof, quota.</small></button><button class="config-card" id="cfg-reward"><span>✦</span><strong>Reward</strong><small>Juara, poin, emblem, sertifikat.</small></button></div>`,onOpen:body=>{body.querySelector('#cfg-level').onclick=()=>levelModal(c.id);body.querySelector('#cfg-rules').onclick=()=>rulesModal(c.id);body.querySelector('#cfg-reward').onclick=()=>rewardModal(c.id);}});}
@@ -1500,8 +1229,8 @@ window.SYKA_PAGE_AWARDS={render};})();
               image_url:imageUrl,
               cta_label:b.querySelector('#cta').value.trim()||null,
               cta_route:b.querySelector('#route').value.trim()||'/lomba',
-              starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#start').value),
-              ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#end').value),
+              starts_at:window.SYKA_UTILS.readDateTimeField('start', b),
+              ends_at:window.SYKA_UTILS.readDateTimeField('end', b),
               is_active:true,
               sort_order:0,
               config:{public_id:b.querySelector('#pid').value||null,width:Number(b.querySelector('#w').value)||null,height:Number(b.querySelector('#h').value)||null,version:b.querySelector('#v').value||null,resource_type:b.querySelector('#r').value||'image'}
@@ -1597,70 +1326,24 @@ window.SYKA_PAGE_AWARDS={render};})();
     return `<label class="workspace-picker"><span>Workspace</span><select id="organizer-workspace-select">${options}</select></label>`;
   }
 
-  const planRank=(code)=>{
-    const ranks={FREE:0,PREMIUM:1,PRO:2};
-    return ranks[String(code||'').toUpperCase()] ?? 0;
-  };
-
-  async function renderPlanChoice(root,orgId,activePlan=null){
-    const [catalog,entitlements,pending]=await Promise.all([
-      svc().listPlanCatalog(),
-      svc().listEntitlements(),
-      svc().getPendingOrganizerPlanOrder(orgId).catch(()=>null)
-    ]);
-
-    const currentCode=String(activePlan?.plan_code||'').toUpperCase();
-    const currentRank=planRank(currentCode);
-
-    root.innerHTML=`<section class="plan-onboarding-v46">
-      ${activePlan?`<div class="plan-current-banner-v46"><div><span class="eyebrow">PAKET AKTIF</span><h2>${esc(catalog.find(p=>p.plan_code===currentCode)?.name||currentCode)}</h2><p>Paket ini sedang digunakan oleh workspace. Untuk berpindah, hanya upgrade ke tingkat yang lebih tinggi yang tersedia.</p></div><span class="plan-state-badge">✓ Digunakan</span></div>`:''}
-      ${pending?`<div class="plan-pending-strip-v46"><div><strong>Upgrade sedang direview</strong><span>Order #${esc(String(pending.id).slice(0,10))} · ${esc(pending.order_items?.[0]?.name||'Paket')}</span></div><span class="status-pill status-warning">PENDING</span></div>`:''}
-      <div class="plan-choice-grid-v46">
-        ${catalog.map(plan=>{
-          const items=entitlements.filter(e=>e.plan_code===plan.plan_code);
-          const code=String(plan.plan_code||'').toUpperCase();
-          const rank=planRank(code);
-          const paid=Number(plan.monthly_price||0)>0;
-          const isCurrent=!!activePlan && code===currentCode;
-          const isHigher=!!activePlan && rank>currentRank;
-          const isLower=!!activePlan && rank<currentRank;
-          let action='';
-          if(!activePlan){
-            action=`<button type="button" class="btn ${paid?'btn-primary':'btn-secondary'} btn-block" data-select-plan="${esc(code)}">${paid?'Pesan paket':'Gunakan Free'}</button>`;
-          }else if(isCurrent){
-            action=`<button type="button" class="btn btn-used btn-block" disabled>✓ Sedang digunakan</button>`;
-          }else if(isHigher){
-            const pendingThis=pending?.order_items?.some?.(i=>String(i.metadata?.plan_code||'').toUpperCase()===code);
-            action=`<button type="button" class="btn btn-primary btn-block" ${pendingThis?'disabled':''} data-select-plan="${esc(code)}">${pendingThis?'Menunggu review':'Beli / Upgrade'}</button>`;
-          }else{
-            action=`<button type="button" class="btn btn-disabled btn-block" disabled>${isLower?'Paket lebih rendah':'Tidak tersedia'}</button>`;
-          }
-          return `<article class="plan-choice-card-v46 ${code==='PREMIUM'?'featured':''} ${isCurrent?'is-current':''} ${isLower?'is-lower':''}">
-            <div class="plan-choice-top"><span class="plan-badge ${code.toLowerCase()}">${esc(plan.badge||code)}</span><span class="plan-choice-label">${isCurrent?'AKTIF':paid?'BERBAYAR':'GRATIS'}</span></div>
-            <h2>${esc(plan.name)}</h2><p>${esc(plan.description||'Paket workspace penyelenggara.')}</p>
-            <div class="plan-price-v46">${paid?`Rp ${Number(plan.monthly_price).toLocaleString('id-ID')}<small>/ bulan</small>`:'Gratis'}</div>
-            <div class="plan-benefit-list-v46">${items.slice(0,7).map(e=>`<div><span>✓</span><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div>`).join('')||'<div class="muted">Capability belum diatur.</div>'}</div>
-            <div class="plan-card-action-v46">${action}</div>
-          </article>`;
-        }).join('')}
-      </div>
-      <div class="plan-choice-note"><strong>${activePlan?'Upgrade saja, tidak ada downgrade otomatis.':'Pilih paket sesuai kebutuhan workspace.'}</strong><span>${activePlan?'Paket yang lebih rendah dikunci untuk menjaga histori billing dan entitlement. Upgrade yang dipilih akan masuk ke proses pemesanan dan review Admin sebelum aktif.':'Free dapat langsung digunakan. Paket berbayar diproses melalui order, WhatsApp, dan bukti transfer yang diunggah ke Cloudinary.'}</span></div>
-    </section>`;
-    root.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>selectPlan(orgId,b.dataset.selectPlan,activePlan));
+  async function renderPlanChoice(root,orgId){
+    const [catalog,entitlements]=await Promise.all([svc().listPlanCatalog(),svc().listEntitlements()]);
+    root.innerHTML=`<section class="plan-onboarding-v46"><div class="plan-choice-grid-v46">${catalog.map(plan=>{
+      const items=entitlements.filter(e=>e.plan_code===plan.plan_code);
+      const paid=Number(plan.monthly_price||0)>0;
+      return `<article class="plan-choice-card-v46 ${plan.plan_code==='PREMIUM'?'featured':''}">
+        <div class="plan-choice-top"><span class="plan-badge ${plan.plan_code.toLowerCase()}">${esc(plan.badge||plan.plan_code)}</span><span class="plan-choice-label">${paid?'Berbayar':'Gratis'}</span></div>
+        <h2>${esc(plan.name)}</h2><p>${esc(plan.description||'Paket workspace penyelenggara.')}</p>
+        <div class="plan-price-v46">${paid?`Rp ${Number(plan.monthly_price).toLocaleString('id-ID')}<small>/ bulan</small>`:'Gratis'}</div>
+        <div class="plan-benefit-list-v46">${items.slice(0,6).map(e=>`<div><span>✓</span><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div>`).join('')||'<div class="muted">Capability belum diatur.</div>'}</div>
+        <button type="button" class="btn ${paid?'btn-primary':'btn-secondary'} btn-block" data-select-plan="${esc(plan.plan_code)}">${paid?'Pilih & bayar':'Aktifkan Free'}</button>
+      </article>`;
+    }).join('')}</div><div class="plan-choice-note"><strong>Paket dapat diganti.</strong><span>Perubahan plan akan tercatat sebagai aktivitas workspace. Paket berbayar aktif setelah bukti transfer diverifikasi Admin.</span></div></section>`;
+    root.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>selectPlan(orgId,b.dataset.selectPlan));
   }
 
-  async function selectPlan(orgId,planCode,activePlan=null){
-    const current=String(activePlan?.plan_code||'').toUpperCase();
-    const target=String(planCode||'').toUpperCase();
-    if(current && planRank(target) < planRank(current)){
-      window.SYKA_TOAST.show('Downgrade tidak tersedia. Pilih paket yang lebih tinggi.','error');
-      return;
-    }
-    if(current && planRank(target) === planRank(current)){
-      window.SYKA_TOAST.show('Paket ini sudah digunakan oleh workspace.','info');
-      return;
-    }
-    if(target==='FREE'){
+  async function selectPlan(orgId,planCode){
+    if(planCode==='FREE'){
       try{await svc().chooseOrganizerPlan(orgId,'FREE');window.SYKA_TOAST.show('Paket Free aktif.','success');window.SYKA_ROUTER.navigate('/organizer',{organizer:orgId,tab:'dashboard'});}catch(e){window.SYKA_TOAST.show(e.message||'Gagal mengaktifkan paket.','error');}
       return;
     }
@@ -1679,11 +1362,21 @@ window.SYKA_PAGE_AWARDS={render};})();
     root.querySelectorAll('[data-config]').forEach(b=>b.onclick=()=>configModal(rows.find(c=>c.id===b.dataset.config)));
     root.querySelectorAll('[data-transition]').forEach(b=>b.onclick=()=>transitionModal(rows.find(c=>c.id===b.dataset.transition)));
   }
+  function dateField(id,label,value,required=false){
+    const p=window.SYKA_UTILS.dateTimeParts(value);
+    const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const y0=new Date().getFullYear();
+    const years=Array.from({length:11},(_,i)=>y0-3+i);
+    const days=Array.from({length:31},(_,i)=>i+1);
+    const hours=Array.from({length:24},(_,i)=>i);
+    const minutes=[0,15,30,45];
+    const opts=(items,current,labeler=x=>String(x))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
+    return `<label class="datetime-field">${label}${required?' *':''}<div class="datetime-dropdown-grid" data-datetime-field="${id}"><select data-dt-day="${id}" aria-label="${label} tanggal">${opts(days,p.day,x=>String(x).padStart(2,'0'))}</select><select data-dt-month="${id}" aria-label="${label} bulan">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select><select data-dt-year="${id}" aria-label="${label} tahun">${opts(years,p.year)}</select><span class="datetime-separator">pukul</span><select data-dt-hour="${id}" aria-label="${label} jam">${opts(hours,p.hour,x=>String(x).padStart(2,'0'))}</select><span class="datetime-colon">:</span><select data-dt-minute="${id}" aria-label="${label} menit">${opts(minutes,p.minute,x=>String(x).padStart(2,'0'))}</select></div></label>`;
+  }
 
-  function dateField(id,label,value,required=false){return `<label>${label}${required?' *':''}<div class="date-control"><span>◷</span><input id="${id}" type="datetime-local" ${required?'required':''} value="${window.SYKA_UTILS.escapeHtml(window.SYKA_UTILS.toLocalInputValue(value))}"></div></label>`;}
   async function competitionModal(orgId,current=null){
     const p=current||{};
-    window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gunakan Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="org-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="org-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div><div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2></div></div><div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ann','Pengumuman',p.announcement_at,false)}<div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div></form>`,onOpen:b=>{b.querySelector('#org-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();b.querySelector('#poster').value=info.secure_url||'';b.querySelector('#poster-public-id').value=info.public_id||'';b.querySelector('#poster-width').value=info.width||'';b.querySelector('#poster-height').value=info.height||'';b.querySelector('#poster-version').value=info.version||'';b.querySelector('#poster-resource').value=info.resource_type||'image';b.querySelector('#org-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster')}</strong></div>`;b.querySelector('#org-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};b.querySelector('#ocf').onsubmit=async e=>{e.preventDefault();try{const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:b.querySelector('#poster').value.trim()||null,poster_public_id:b.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(b.querySelector('#poster-width').value)||null,poster_height:Number(b.querySelector('#poster-height').value)||null,poster_version:b.querySelector('#poster-version').value.trim()||null,poster_resource_type:b.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#rs').value),registration_ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#re').value),starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#start').value),ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#end').value),announcement_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#ann').value)};await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#oc-feedback').innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};}});
+    window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gunakan Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="org-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="org-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div><div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2></div></div><div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ann','Pengumuman',p.announcement_at,false)}<div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div></form>`,onOpen:b=>{b.querySelector('#org-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();if(!info?.secure_url)throw new Error('Cloudinary tidak mengembalikan file poster.');b.querySelector('#poster').value=info.secure_url||'';b.querySelector('#poster-public-id').value=info.public_id||'';b.querySelector('#poster-width').value=info.width||'';b.querySelector('#poster-height').value=info.height||'';b.querySelector('#poster-version').value=info.version||'';b.querySelector('#poster-resource').value=info.resource_type||'image';b.querySelector('#org-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster')}</strong></div>`;b.querySelector('#org-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};b.querySelector('#ocf').onsubmit=async e=>{e.preventDefault();try{const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:b.querySelector('#poster').value.trim()||null,poster_public_id:b.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(b.querySelector('#poster-width').value)||null,poster_height:Number(b.querySelector('#poster-height').value)||null,poster_version:b.querySelector('#poster-version').value.trim()||null,poster_resource_type:b.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.readDateTimeField('rs', b),registration_ends_at:window.SYKA_UTILS.readDateTimeField('re', b),starts_at:window.SYKA_UTILS.readDateTimeField('start', b),ends_at:window.SYKA_UTILS.readDateTimeField('end', b),announcement_at:window.SYKA_UTILS.readDateTimeField('ann', b)};await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#oc-feedback').innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};}});
   }
   function transitionModal(c){const choices=transitions[c.status]||[];if(!choices.length){window.SYKA_TOAST.show(`Tidak ada transisi valid dari ${c.status}.`,'warning');return;}window.SYKA_MODAL.open({title:'Ubah status kompetisi',html:`<div class="transition-current"><span>STATUS SAAT INI</span><strong>${esc(c.status)}</strong></div><form id="otf" class="form-card"><label>Status tujuan<select id="target">${choices.map(s=>`<option>${s}</option>`).join('')}</select></label><label>Alasan<textarea id="reason" placeholder="Mengapa status ini diubah?"></textarea></label><button class="btn btn-primary btn-block">Terapkan</button><div class="form-hint">Backend akan memvalidasi lifecycle dan mencatat audit.</div></form>`,onOpen:b=>b.querySelector('#otf').onsubmit=async e=>{e.preventDefault();try{await svc().transitionCompetition(c.id,b.querySelector('#target').value,b.querySelector('#reason').value.trim()||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Status kompetisi diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
   function configModal(c){window.SYKA_MODAL.open({title:`Config · ${c.title}`,html:`<div class="config-grid"><button class="config-card" id="lvl"><span>◫</span><strong>Jenjang</strong><small>Grade, points, level kompetisi.</small></button><button class="config-card" id="rules"><span>◌</span><strong>Registrasi</strong><small>Eligibility, twibbon, quota.</small></button><button class="config-card" id="reward"><span>✦</span><strong>Reward</strong><small>Juara, poin, emblem.</small></button></div>`,onOpen:b=>{b.querySelector('#lvl').onclick=()=>levelModal(c.id);b.querySelector('#rules').onclick=()=>rulesModal(c.id);b.querySelector('#reward').onclick=()=>rewardModal(c.id);}});}
@@ -1729,24 +1422,11 @@ window.SYKA_PAGE_AWARDS={render};})();
 
   async function notifications(root){const a=window.SYKA_STATE.getState().auth;const rows=await window.SYKA_NOTIFICATION_SERVICE.list(a.user.id);root.innerHTML=`<div class="toolbar"><div><h2>Notifikasi</h2><p>Event dan update yang dikirim ke user organizer.</p></div></div><div class="data-table">${rows.map(n=>`<div class="data-row"><div><strong>${esc(n.title||'Notifikasi')}</strong><small>${esc(n.body||'')} · ${fmt(n.created_at)}</small></div><span class="status-pill ${n.read_at?'status-neutral':'status-success'}">${n.read_at?'Sudah dibaca':'Baru'}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada notifikasi',text:'Event backend akan masuk di sini.'})}</div>`;}
   async function plan(root,orgId){
-    const [active,entitlements,catalog,pending]=await Promise.all([
-      svc().listActiveOrganizerPlan(orgId),
-      svc().listEntitlements(),
-      svc().listPlanCatalog(),
-      svc().getPendingOrganizerPlanOrder(orgId).catch(()=>null)
-    ]);
-    const current=String(active?.plan_code||'FREE').toUpperCase();
+    const [active,entitlements,catalog]=await Promise.all([svc().listActiveOrganizerPlan(orgId),svc().listEntitlements(),svc().listPlanCatalog()]);
+    const current=active?.plan_code||'FREE';
     const meta=catalog.find(x=>x.plan_code===current);
-    const currentEntitlements=entitlements.filter(e=>e.plan_code===current);
-
-    root.innerHTML=`<div class="plan-usage-page-v46">
-      <section class="plan-usage-header-v46"><div><span class="eyebrow">PLAN & USAGE</span><h2>${esc(meta?.name||current)}</h2><p>${active?`Aktif sejak ${fmt(active.starts_at)}.`:'Belum ada paket aktif.'} Paket aktif menjadi sumber entitlement dan quota workspace.</p></div><div class="plan-usage-actions"><span class="plan-badge ${current.toLowerCase()}">${esc(meta?.badge||current)}</span><span class="plan-state-badge">✓ Digunakan</span></div></section>
-      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">PAKET AKTIF</span><h3>${esc(meta?.name||current)}</h3></div><span class="chip">${active?'AKTIF':'DEFAULT'}</span></div><div class="plan-entitlement-grid-v46">${currentEntitlements.map(e=>`<div class="entitlement-card-v46"><span>✓</span><div><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk paket ini.</p>'}</div></section>
-      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">UPGRADE</span><h3>Pilih tingkat yang lebih tinggi</h3><p class="muted">Paket aktif tidak dapat diturunkan. Hanya upgrade yang tersedia untuk dipesan.</p></div></div><div id="plan-upgrade-list"></div></section>
-      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">BILLING</span><h3>Status paket & pembayaran</h3></div></div><div class="billing-card-v46"><div><span>Harga aktif</span><strong>${Number(meta?.monthly_price||0)===0?'Gratis':`Rp ${Number(meta.monthly_price).toLocaleString('id-ID')} / bulan`}</strong></div><div><span>Status</span><strong>${active?'Aktif':'Belum aktif'}</strong></div><div><span>Upgrade</span><strong>${pending?'Menunggu review Admin':'Pesan via WhatsApp + bukti transfer'}</strong></div></div></section>
-    </div>`;
-
-    await renderPlanChoice(document.getElementById('plan-upgrade-list'),orgId,active);
+    root.innerHTML=`<section class="plan-usage-header-v46"><div><span class="eyebrow">PLAN & USAGE</span><h2>${esc(meta?.name||current)}</h2><p>${active?`Aktif sejak ${fmt(active.starts_at)}.`:'Belum ada paket aktif.'} Capability dan quota berasal dari backend.</p></div><div class="plan-usage-actions"><span class="plan-badge ${current.toLowerCase()}">${esc(meta?.badge||current)}</span><button class="btn btn-secondary btn-sm" id="change-plan">Ganti paket</button></div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">CAPABILITY</span><h3>Fitur workspace</h3></div></div><div class="plan-entitlement-grid-v46">${entitlements.filter(e=>e.plan_code===current).map(e=>`<div class="entitlement-card-v46"><span>✓</span><div><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk paket ini.</p>'}</div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">BILLING</span><h3>Paket aktif</h3></div></div><div class="billing-card-v46"><div><span>Harga</span><strong>${Number(meta?.monthly_price||0)===0?'Gratis':`Rp ${Number(meta.monthly_price).toLocaleString('id-ID')} / bulan`}</strong></div><div><span>Status</span><strong>${active?'Aktif':'Belum aktif'}</strong></div><div><span>Upgrade</span><strong>WhatsApp + bukti transfer</strong></div></div></section>`;
+    document.getElementById('change-plan').onclick=()=>renderPlanChoice(document.getElementById('organizer-content'),orgId);
   }
     window.SYKA_PAGE_ORGANIZER={render};
 })();

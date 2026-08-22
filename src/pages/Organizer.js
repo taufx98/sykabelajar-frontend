@@ -75,70 +75,24 @@
     return `<label class="workspace-picker"><span>Workspace</span><select id="organizer-workspace-select">${options}</select></label>`;
   }
 
-  const planRank=(code)=>{
-    const ranks={FREE:0,PREMIUM:1,PRO:2};
-    return ranks[String(code||'').toUpperCase()] ?? 0;
-  };
-
-  async function renderPlanChoice(root,orgId,activePlan=null){
-    const [catalog,entitlements,pending]=await Promise.all([
-      svc().listPlanCatalog(),
-      svc().listEntitlements(),
-      svc().getPendingOrganizerPlanOrder(orgId).catch(()=>null)
-    ]);
-
-    const currentCode=String(activePlan?.plan_code||'').toUpperCase();
-    const currentRank=planRank(currentCode);
-
-    root.innerHTML=`<section class="plan-onboarding-v46">
-      ${activePlan?`<div class="plan-current-banner-v46"><div><span class="eyebrow">PAKET AKTIF</span><h2>${esc(catalog.find(p=>p.plan_code===currentCode)?.name||currentCode)}</h2><p>Paket ini sedang digunakan oleh workspace. Untuk berpindah, hanya upgrade ke tingkat yang lebih tinggi yang tersedia.</p></div><span class="plan-state-badge">✓ Digunakan</span></div>`:''}
-      ${pending?`<div class="plan-pending-strip-v46"><div><strong>Upgrade sedang direview</strong><span>Order #${esc(String(pending.id).slice(0,10))} · ${esc(pending.order_items?.[0]?.name||'Paket')}</span></div><span class="status-pill status-warning">PENDING</span></div>`:''}
-      <div class="plan-choice-grid-v46">
-        ${catalog.map(plan=>{
-          const items=entitlements.filter(e=>e.plan_code===plan.plan_code);
-          const code=String(plan.plan_code||'').toUpperCase();
-          const rank=planRank(code);
-          const paid=Number(plan.monthly_price||0)>0;
-          const isCurrent=!!activePlan && code===currentCode;
-          const isHigher=!!activePlan && rank>currentRank;
-          const isLower=!!activePlan && rank<currentRank;
-          let action='';
-          if(!activePlan){
-            action=`<button type="button" class="btn ${paid?'btn-primary':'btn-secondary'} btn-block" data-select-plan="${esc(code)}">${paid?'Pesan paket':'Gunakan Free'}</button>`;
-          }else if(isCurrent){
-            action=`<button type="button" class="btn btn-used btn-block" disabled>✓ Sedang digunakan</button>`;
-          }else if(isHigher){
-            const pendingThis=pending?.order_items?.some?.(i=>String(i.metadata?.plan_code||'').toUpperCase()===code);
-            action=`<button type="button" class="btn btn-primary btn-block" ${pendingThis?'disabled':''} data-select-plan="${esc(code)}">${pendingThis?'Menunggu review':'Beli / Upgrade'}</button>`;
-          }else{
-            action=`<button type="button" class="btn btn-disabled btn-block" disabled>${isLower?'Paket lebih rendah':'Tidak tersedia'}</button>`;
-          }
-          return `<article class="plan-choice-card-v46 ${code==='PREMIUM'?'featured':''} ${isCurrent?'is-current':''} ${isLower?'is-lower':''}">
-            <div class="plan-choice-top"><span class="plan-badge ${code.toLowerCase()}">${esc(plan.badge||code)}</span><span class="plan-choice-label">${isCurrent?'AKTIF':paid?'BERBAYAR':'GRATIS'}</span></div>
-            <h2>${esc(plan.name)}</h2><p>${esc(plan.description||'Paket workspace penyelenggara.')}</p>
-            <div class="plan-price-v46">${paid?`Rp ${Number(plan.monthly_price).toLocaleString('id-ID')}<small>/ bulan</small>`:'Gratis'}</div>
-            <div class="plan-benefit-list-v46">${items.slice(0,7).map(e=>`<div><span>✓</span><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div>`).join('')||'<div class="muted">Capability belum diatur.</div>'}</div>
-            <div class="plan-card-action-v46">${action}</div>
-          </article>`;
-        }).join('')}
-      </div>
-      <div class="plan-choice-note"><strong>${activePlan?'Upgrade saja, tidak ada downgrade otomatis.':'Pilih paket sesuai kebutuhan workspace.'}</strong><span>${activePlan?'Paket yang lebih rendah dikunci untuk menjaga histori billing dan entitlement. Upgrade yang dipilih akan masuk ke proses pemesanan dan review Admin sebelum aktif.':'Free dapat langsung digunakan. Paket berbayar diproses melalui order, WhatsApp, dan bukti transfer yang diunggah ke Cloudinary.'}</span></div>
-    </section>`;
-    root.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>selectPlan(orgId,b.dataset.selectPlan,activePlan));
+  async function renderPlanChoice(root,orgId){
+    const [catalog,entitlements]=await Promise.all([svc().listPlanCatalog(),svc().listEntitlements()]);
+    root.innerHTML=`<section class="plan-onboarding-v46"><div class="plan-choice-grid-v46">${catalog.map(plan=>{
+      const items=entitlements.filter(e=>e.plan_code===plan.plan_code);
+      const paid=Number(plan.monthly_price||0)>0;
+      return `<article class="plan-choice-card-v46 ${plan.plan_code==='PREMIUM'?'featured':''}">
+        <div class="plan-choice-top"><span class="plan-badge ${plan.plan_code.toLowerCase()}">${esc(plan.badge||plan.plan_code)}</span><span class="plan-choice-label">${paid?'Berbayar':'Gratis'}</span></div>
+        <h2>${esc(plan.name)}</h2><p>${esc(plan.description||'Paket workspace penyelenggara.')}</p>
+        <div class="plan-price-v46">${paid?`Rp ${Number(plan.monthly_price).toLocaleString('id-ID')}<small>/ bulan</small>`:'Gratis'}</div>
+        <div class="plan-benefit-list-v46">${items.slice(0,6).map(e=>`<div><span>✓</span><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div>`).join('')||'<div class="muted">Capability belum diatur.</div>'}</div>
+        <button type="button" class="btn ${paid?'btn-primary':'btn-secondary'} btn-block" data-select-plan="${esc(plan.plan_code)}">${paid?'Pilih & bayar':'Aktifkan Free'}</button>
+      </article>`;
+    }).join('')}</div><div class="plan-choice-note"><strong>Paket dapat diganti.</strong><span>Perubahan plan akan tercatat sebagai aktivitas workspace. Paket berbayar aktif setelah bukti transfer diverifikasi Admin.</span></div></section>`;
+    root.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>selectPlan(orgId,b.dataset.selectPlan));
   }
 
-  async function selectPlan(orgId,planCode,activePlan=null){
-    const current=String(activePlan?.plan_code||'').toUpperCase();
-    const target=String(planCode||'').toUpperCase();
-    if(current && planRank(target) < planRank(current)){
-      window.SYKA_TOAST.show('Downgrade tidak tersedia. Pilih paket yang lebih tinggi.','error');
-      return;
-    }
-    if(current && planRank(target) === planRank(current)){
-      window.SYKA_TOAST.show('Paket ini sudah digunakan oleh workspace.','info');
-      return;
-    }
-    if(target==='FREE'){
+  async function selectPlan(orgId,planCode){
+    if(planCode==='FREE'){
       try{await svc().chooseOrganizerPlan(orgId,'FREE');window.SYKA_TOAST.show('Paket Free aktif.','success');window.SYKA_ROUTER.navigate('/organizer',{organizer:orgId,tab:'dashboard'});}catch(e){window.SYKA_TOAST.show(e.message||'Gagal mengaktifkan paket.','error');}
       return;
     }
@@ -157,11 +111,21 @@
     root.querySelectorAll('[data-config]').forEach(b=>b.onclick=()=>configModal(rows.find(c=>c.id===b.dataset.config)));
     root.querySelectorAll('[data-transition]').forEach(b=>b.onclick=()=>transitionModal(rows.find(c=>c.id===b.dataset.transition)));
   }
+  function dateField(id,label,value,required=false){
+    const p=window.SYKA_UTILS.dateTimeParts(value);
+    const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const y0=new Date().getFullYear();
+    const years=Array.from({length:11},(_,i)=>y0-3+i);
+    const days=Array.from({length:31},(_,i)=>i+1);
+    const hours=Array.from({length:24},(_,i)=>i);
+    const minutes=[0,15,30,45];
+    const opts=(items,current,labeler=x=>String(x))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
+    return `<label class="datetime-field">${label}${required?' *':''}<div class="datetime-dropdown-grid" data-datetime-field="${id}"><select data-dt-day="${id}" aria-label="${label} tanggal">${opts(days,p.day,x=>String(x).padStart(2,'0'))}</select><select data-dt-month="${id}" aria-label="${label} bulan">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select><select data-dt-year="${id}" aria-label="${label} tahun">${opts(years,p.year)}</select><span class="datetime-separator">pukul</span><select data-dt-hour="${id}" aria-label="${label} jam">${opts(hours,p.hour,x=>String(x).padStart(2,'0'))}</select><span class="datetime-colon">:</span><select data-dt-minute="${id}" aria-label="${label} menit">${opts(minutes,p.minute,x=>String(x).padStart(2,'0'))}</select></div></label>`;
+  }
 
-  function dateField(id,label,value,required=false){return `<label>${label}${required?' *':''}<div class="date-control"><span>◷</span><input id="${id}" type="datetime-local" ${required?'required':''} value="${window.SYKA_UTILS.escapeHtml(window.SYKA_UTILS.toLocalInputValue(value))}"></div></label>`;}
   async function competitionModal(orgId,current=null){
     const p=current||{};
-    window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gunakan Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="org-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="org-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div><div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2></div></div><div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ann','Pengumuman',p.announcement_at,false)}<div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div></form>`,onOpen:b=>{b.querySelector('#org-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();b.querySelector('#poster').value=info.secure_url||'';b.querySelector('#poster-public-id').value=info.public_id||'';b.querySelector('#poster-width').value=info.width||'';b.querySelector('#poster-height').value=info.height||'';b.querySelector('#poster-version').value=info.version||'';b.querySelector('#poster-resource').value=info.resource_type||'image';b.querySelector('#org-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster')}</strong></div>`;b.querySelector('#org-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};b.querySelector('#ocf').onsubmit=async e=>{e.preventDefault();try{const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:b.querySelector('#poster').value.trim()||null,poster_public_id:b.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(b.querySelector('#poster-width').value)||null,poster_height:Number(b.querySelector('#poster-height').value)||null,poster_version:b.querySelector('#poster-version').value.trim()||null,poster_resource_type:b.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#rs').value),registration_ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#re').value),starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#start').value),ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#end').value),announcement_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#ann').value)};await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#oc-feedback').innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};}});
+    window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gunakan Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="org-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="org-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div><div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2></div></div><div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ann','Pengumuman',p.announcement_at,false)}<div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div></form>`,onOpen:b=>{b.querySelector('#org-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();if(!info?.secure_url)throw new Error('Cloudinary tidak mengembalikan file poster.');b.querySelector('#poster').value=info.secure_url||'';b.querySelector('#poster-public-id').value=info.public_id||'';b.querySelector('#poster-width').value=info.width||'';b.querySelector('#poster-height').value=info.height||'';b.querySelector('#poster-version').value=info.version||'';b.querySelector('#poster-resource').value=info.resource_type||'image';b.querySelector('#org-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster')}</strong></div>`;b.querySelector('#org-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};b.querySelector('#ocf').onsubmit=async e=>{e.preventDefault();try{const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:b.querySelector('#poster').value.trim()||null,poster_public_id:b.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(b.querySelector('#poster-width').value)||null,poster_height:Number(b.querySelector('#poster-height').value)||null,poster_version:b.querySelector('#poster-version').value.trim()||null,poster_resource_type:b.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.readDateTimeField('rs', b),registration_ends_at:window.SYKA_UTILS.readDateTimeField('re', b),starts_at:window.SYKA_UTILS.readDateTimeField('start', b),ends_at:window.SYKA_UTILS.readDateTimeField('end', b),announcement_at:window.SYKA_UTILS.readDateTimeField('ann', b)};await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#oc-feedback').innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};}});
   }
   function transitionModal(c){const choices=transitions[c.status]||[];if(!choices.length){window.SYKA_TOAST.show(`Tidak ada transisi valid dari ${c.status}.`,'warning');return;}window.SYKA_MODAL.open({title:'Ubah status kompetisi',html:`<div class="transition-current"><span>STATUS SAAT INI</span><strong>${esc(c.status)}</strong></div><form id="otf" class="form-card"><label>Status tujuan<select id="target">${choices.map(s=>`<option>${s}</option>`).join('')}</select></label><label>Alasan<textarea id="reason" placeholder="Mengapa status ini diubah?"></textarea></label><button class="btn btn-primary btn-block">Terapkan</button><div class="form-hint">Backend akan memvalidasi lifecycle dan mencatat audit.</div></form>`,onOpen:b=>b.querySelector('#otf').onsubmit=async e=>{e.preventDefault();try{await svc().transitionCompetition(c.id,b.querySelector('#target').value,b.querySelector('#reason').value.trim()||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Status kompetisi diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
   function configModal(c){window.SYKA_MODAL.open({title:`Config · ${c.title}`,html:`<div class="config-grid"><button class="config-card" id="lvl"><span>◫</span><strong>Jenjang</strong><small>Grade, points, level kompetisi.</small></button><button class="config-card" id="rules"><span>◌</span><strong>Registrasi</strong><small>Eligibility, twibbon, quota.</small></button><button class="config-card" id="reward"><span>✦</span><strong>Reward</strong><small>Juara, poin, emblem.</small></button></div>`,onOpen:b=>{b.querySelector('#lvl').onclick=()=>levelModal(c.id);b.querySelector('#rules').onclick=()=>rulesModal(c.id);b.querySelector('#reward').onclick=()=>rewardModal(c.id);}});}
@@ -207,24 +171,11 @@
 
   async function notifications(root){const a=window.SYKA_STATE.getState().auth;const rows=await window.SYKA_NOTIFICATION_SERVICE.list(a.user.id);root.innerHTML=`<div class="toolbar"><div><h2>Notifikasi</h2><p>Event dan update yang dikirim ke user organizer.</p></div></div><div class="data-table">${rows.map(n=>`<div class="data-row"><div><strong>${esc(n.title||'Notifikasi')}</strong><small>${esc(n.body||'')} · ${fmt(n.created_at)}</small></div><span class="status-pill ${n.read_at?'status-neutral':'status-success'}">${n.read_at?'Sudah dibaca':'Baru'}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada notifikasi',text:'Event backend akan masuk di sini.'})}</div>`;}
   async function plan(root,orgId){
-    const [active,entitlements,catalog,pending]=await Promise.all([
-      svc().listActiveOrganizerPlan(orgId),
-      svc().listEntitlements(),
-      svc().listPlanCatalog(),
-      svc().getPendingOrganizerPlanOrder(orgId).catch(()=>null)
-    ]);
-    const current=String(active?.plan_code||'FREE').toUpperCase();
+    const [active,entitlements,catalog]=await Promise.all([svc().listActiveOrganizerPlan(orgId),svc().listEntitlements(),svc().listPlanCatalog()]);
+    const current=active?.plan_code||'FREE';
     const meta=catalog.find(x=>x.plan_code===current);
-    const currentEntitlements=entitlements.filter(e=>e.plan_code===current);
-
-    root.innerHTML=`<div class="plan-usage-page-v46">
-      <section class="plan-usage-header-v46"><div><span class="eyebrow">PLAN & USAGE</span><h2>${esc(meta?.name||current)}</h2><p>${active?`Aktif sejak ${fmt(active.starts_at)}.`:'Belum ada paket aktif.'} Paket aktif menjadi sumber entitlement dan quota workspace.</p></div><div class="plan-usage-actions"><span class="plan-badge ${current.toLowerCase()}">${esc(meta?.badge||current)}</span><span class="plan-state-badge">✓ Digunakan</span></div></section>
-      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">PAKET AKTIF</span><h3>${esc(meta?.name||current)}</h3></div><span class="chip">${active?'AKTIF':'DEFAULT'}</span></div><div class="plan-entitlement-grid-v46">${currentEntitlements.map(e=>`<div class="entitlement-card-v46"><span>✓</span><div><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk paket ini.</p>'}</div></section>
-      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">UPGRADE</span><h3>Pilih tingkat yang lebih tinggi</h3><p class="muted">Paket aktif tidak dapat diturunkan. Hanya upgrade yang tersedia untuk dipesan.</p></div></div><div id="plan-upgrade-list"></div></section>
-      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">BILLING</span><h3>Status paket & pembayaran</h3></div></div><div class="billing-card-v46"><div><span>Harga aktif</span><strong>${Number(meta?.monthly_price||0)===0?'Gratis':`Rp ${Number(meta.monthly_price).toLocaleString('id-ID')} / bulan`}</strong></div><div><span>Status</span><strong>${active?'Aktif':'Belum aktif'}</strong></div><div><span>Upgrade</span><strong>${pending?'Menunggu review Admin':'Pesan via WhatsApp + bukti transfer'}</strong></div></div></section>
-    </div>`;
-
-    await renderPlanChoice(document.getElementById('plan-upgrade-list'),orgId,active);
+    root.innerHTML=`<section class="plan-usage-header-v46"><div><span class="eyebrow">PLAN & USAGE</span><h2>${esc(meta?.name||current)}</h2><p>${active?`Aktif sejak ${fmt(active.starts_at)}.`:'Belum ada paket aktif.'} Capability dan quota berasal dari backend.</p></div><div class="plan-usage-actions"><span class="plan-badge ${current.toLowerCase()}">${esc(meta?.badge||current)}</span><button class="btn btn-secondary btn-sm" id="change-plan">Ganti paket</button></div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">CAPABILITY</span><h3>Fitur workspace</h3></div></div><div class="plan-entitlement-grid-v46">${entitlements.filter(e=>e.plan_code===current).map(e=>`<div class="entitlement-card-v46"><span>✓</span><div><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk paket ini.</p>'}</div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">BILLING</span><h3>Paket aktif</h3></div></div><div class="billing-card-v46"><div><span>Harga</span><strong>${Number(meta?.monthly_price||0)===0?'Gratis':`Rp ${Number(meta.monthly_price).toLocaleString('id-ID')} / bulan`}</strong></div><div><span>Status</span><strong>${active?'Aktif':'Belum aktif'}</strong></div><div><span>Upgrade</span><strong>WhatsApp + bukti transfer</strong></div></div></section>`;
+    document.getElementById('change-plan').onclick=()=>renderPlanChoice(document.getElementById('organizer-content'),orgId);
   }
     window.SYKA_PAGE_ORGANIZER={render};
 })();
