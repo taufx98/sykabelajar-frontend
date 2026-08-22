@@ -3,7 +3,7 @@
   const existing = window.SYKA_CONFIG || {};
   window.SYKA_CONFIG = Object.freeze({
     APP_NAME: 'Sykabelajar.id',
-    APP_VERSION: '4.6.1-production-polish',
+    APP_VERSION: '4.6.2-plan-upgrade-only',
     ROUTE_MODE: existing.ROUTE_MODE || 'query',
     APP_PAGE: existing.APP_PAGE || '/p/app.html',
     ASSET_BASE_URL: existing.ASSET_BASE_URL || './dist',
@@ -1340,24 +1340,70 @@ window.SYKA_PAGE_AWARDS={render};})();
     return `<label class="workspace-picker"><span>Workspace</span><select id="organizer-workspace-select">${options}</select></label>`;
   }
 
-  async function renderPlanChoice(root,orgId){
-    const [catalog,entitlements]=await Promise.all([svc().listPlanCatalog(),svc().listEntitlements()]);
-    root.innerHTML=`<section class="plan-onboarding-v46"><div class="plan-choice-grid-v46">${catalog.map(plan=>{
-      const items=entitlements.filter(e=>e.plan_code===plan.plan_code);
-      const paid=Number(plan.monthly_price||0)>0;
-      return `<article class="plan-choice-card-v46 ${plan.plan_code==='PREMIUM'?'featured':''}">
-        <div class="plan-choice-top"><span class="plan-badge ${plan.plan_code.toLowerCase()}">${esc(plan.badge||plan.plan_code)}</span><span class="plan-choice-label">${paid?'Berbayar':'Gratis'}</span></div>
-        <h2>${esc(plan.name)}</h2><p>${esc(plan.description||'Paket workspace penyelenggara.')}</p>
-        <div class="plan-price-v46">${paid?`Rp ${Number(plan.monthly_price).toLocaleString('id-ID')}<small>/ bulan</small>`:'Gratis'}</div>
-        <div class="plan-benefit-list-v46">${items.slice(0,6).map(e=>`<div><span>✓</span><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div>`).join('')||'<div class="muted">Capability belum diatur.</div>'}</div>
-        <button type="button" class="btn ${paid?'btn-primary':'btn-secondary'} btn-block" data-select-plan="${esc(plan.plan_code)}">${paid?'Pilih & bayar':'Aktifkan Free'}</button>
-      </article>`;
-    }).join('')}</div><div class="plan-choice-note"><strong>Paket dapat diganti.</strong><span>Perubahan plan akan tercatat sebagai aktivitas workspace. Paket berbayar aktif setelah bukti transfer diverifikasi Admin.</span></div></section>`;
-    root.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>selectPlan(orgId,b.dataset.selectPlan));
+  const planRank=(code)=>{
+    const ranks={FREE:0,PREMIUM:1,PRO:2};
+    return ranks[String(code||'').toUpperCase()] ?? 0;
+  };
+
+  async function renderPlanChoice(root,orgId,activePlan=null){
+    const [catalog,entitlements,pending]=await Promise.all([
+      svc().listPlanCatalog(),
+      svc().listEntitlements(),
+      svc().getPendingOrganizerPlanOrder(orgId).catch(()=>null)
+    ]);
+
+    const currentCode=String(activePlan?.plan_code||'').toUpperCase();
+    const currentRank=planRank(currentCode);
+
+    root.innerHTML=`<section class="plan-onboarding-v46">
+      ${activePlan?`<div class="plan-current-banner-v46"><div><span class="eyebrow">PAKET AKTIF</span><h2>${esc(catalog.find(p=>p.plan_code===currentCode)?.name||currentCode)}</h2><p>Paket ini sedang digunakan oleh workspace. Untuk berpindah, hanya upgrade ke tingkat yang lebih tinggi yang tersedia.</p></div><span class="plan-state-badge">✓ Digunakan</span></div>`:''}
+      ${pending?`<div class="plan-pending-strip-v46"><div><strong>Upgrade sedang direview</strong><span>Order #${esc(String(pending.id).slice(0,10))} · ${esc(pending.order_items?.[0]?.name||'Paket')}</span></div><span class="status-pill status-warning">PENDING</span></div>`:''}
+      <div class="plan-choice-grid-v46">
+        ${catalog.map(plan=>{
+          const items=entitlements.filter(e=>e.plan_code===plan.plan_code);
+          const code=String(plan.plan_code||'').toUpperCase();
+          const rank=planRank(code);
+          const paid=Number(plan.monthly_price||0)>0;
+          const isCurrent=!!activePlan && code===currentCode;
+          const isHigher=!!activePlan && rank>currentRank;
+          const isLower=!!activePlan && rank<currentRank;
+          let action='';
+          if(!activePlan){
+            action=`<button type="button" class="btn ${paid?'btn-primary':'btn-secondary'} btn-block" data-select-plan="${esc(code)}">${paid?'Pesan paket':'Gunakan Free'}</button>`;
+          }else if(isCurrent){
+            action=`<button type="button" class="btn btn-used btn-block" disabled>✓ Sedang digunakan</button>`;
+          }else if(isHigher){
+            const pendingThis=pending?.order_items?.some?.(i=>String(i.metadata?.plan_code||'').toUpperCase()===code);
+            action=`<button type="button" class="btn btn-primary btn-block" ${pendingThis?'disabled':''} data-select-plan="${esc(code)}">${pendingThis?'Menunggu review':'Beli / Upgrade'}</button>`;
+          }else{
+            action=`<button type="button" class="btn btn-disabled btn-block" disabled>${isLower?'Paket lebih rendah':'Tidak tersedia'}</button>`;
+          }
+          return `<article class="plan-choice-card-v46 ${code==='PREMIUM'?'featured':''} ${isCurrent?'is-current':''} ${isLower?'is-lower':''}">
+            <div class="plan-choice-top"><span class="plan-badge ${code.toLowerCase()}">${esc(plan.badge||code)}</span><span class="plan-choice-label">${isCurrent?'AKTIF':paid?'BERBAYAR':'GRATIS'}</span></div>
+            <h2>${esc(plan.name)}</h2><p>${esc(plan.description||'Paket workspace penyelenggara.')}</p>
+            <div class="plan-price-v46">${paid?`Rp ${Number(plan.monthly_price).toLocaleString('id-ID')}<small>/ bulan</small>`:'Gratis'}</div>
+            <div class="plan-benefit-list-v46">${items.slice(0,7).map(e=>`<div><span>✓</span><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div>`).join('')||'<div class="muted">Capability belum diatur.</div>'}</div>
+            <div class="plan-card-action-v46">${action}</div>
+          </article>`;
+        }).join('')}
+      </div>
+      <div class="plan-choice-note"><strong>${activePlan?'Upgrade saja, tidak ada downgrade otomatis.':'Pilih paket sesuai kebutuhan workspace.'}</strong><span>${activePlan?'Paket yang lebih rendah dikunci untuk menjaga histori billing dan entitlement. Upgrade yang dipilih akan masuk ke proses pemesanan dan review Admin sebelum aktif.':'Free dapat langsung digunakan. Paket berbayar diproses melalui order, WhatsApp, dan bukti transfer yang diunggah ke Cloudinary.'}</span></div>
+    </section>`;
+    root.querySelectorAll('[data-select-plan]').forEach(b=>b.onclick=()=>selectPlan(orgId,b.dataset.selectPlan,activePlan));
   }
 
-  async function selectPlan(orgId,planCode){
-    if(planCode==='FREE'){
+  async function selectPlan(orgId,planCode,activePlan=null){
+    const current=String(activePlan?.plan_code||'').toUpperCase();
+    const target=String(planCode||'').toUpperCase();
+    if(current && planRank(target) < planRank(current)){
+      window.SYKA_TOAST.show('Downgrade tidak tersedia. Pilih paket yang lebih tinggi.','error');
+      return;
+    }
+    if(current && planRank(target) === planRank(current)){
+      window.SYKA_TOAST.show('Paket ini sudah digunakan oleh workspace.','info');
+      return;
+    }
+    if(target==='FREE'){
       try{await svc().chooseOrganizerPlan(orgId,'FREE');window.SYKA_TOAST.show('Paket Free aktif.','success');window.SYKA_ROUTER.navigate('/organizer',{organizer:orgId,tab:'dashboard'});}catch(e){window.SYKA_TOAST.show(e.message||'Gagal mengaktifkan paket.','error');}
       return;
     }
@@ -1426,11 +1472,24 @@ window.SYKA_PAGE_AWARDS={render};})();
 
   async function notifications(root){const a=window.SYKA_STATE.getState().auth;const rows=await window.SYKA_NOTIFICATION_SERVICE.list(a.user.id);root.innerHTML=`<div class="toolbar"><div><h2>Notifikasi</h2><p>Event dan update yang dikirim ke user organizer.</p></div></div><div class="data-table">${rows.map(n=>`<div class="data-row"><div><strong>${esc(n.title||'Notifikasi')}</strong><small>${esc(n.body||'')} · ${fmt(n.created_at)}</small></div><span class="status-pill ${n.read_at?'status-neutral':'status-success'}">${n.read_at?'Sudah dibaca':'Baru'}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada notifikasi',text:'Event backend akan masuk di sini.'})}</div>`;}
   async function plan(root,orgId){
-    const [active,entitlements,catalog]=await Promise.all([svc().listActiveOrganizerPlan(orgId),svc().listEntitlements(),svc().listPlanCatalog()]);
-    const current=active?.plan_code||'FREE';
+    const [active,entitlements,catalog,pending]=await Promise.all([
+      svc().listActiveOrganizerPlan(orgId),
+      svc().listEntitlements(),
+      svc().listPlanCatalog(),
+      svc().getPendingOrganizerPlanOrder(orgId).catch(()=>null)
+    ]);
+    const current=String(active?.plan_code||'FREE').toUpperCase();
     const meta=catalog.find(x=>x.plan_code===current);
-    root.innerHTML=`<section class="plan-usage-header-v46"><div><span class="eyebrow">PLAN & USAGE</span><h2>${esc(meta?.name||current)}</h2><p>${active?`Aktif sejak ${fmt(active.starts_at)}.`:'Belum ada paket aktif.'} Capability dan quota berasal dari backend.</p></div><div class="plan-usage-actions"><span class="plan-badge ${current.toLowerCase()}">${esc(meta?.badge||current)}</span><button class="btn btn-secondary btn-sm" id="change-plan">Ganti paket</button></div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">CAPABILITY</span><h3>Fitur workspace</h3></div></div><div class="plan-entitlement-grid-v46">${entitlements.filter(e=>e.plan_code===current).map(e=>`<div class="entitlement-card-v46"><span>✓</span><div><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk paket ini.</p>'}</div></section><section class="panel-card"><div class="panel-head"><div><span class="eyebrow">BILLING</span><h3>Paket aktif</h3></div></div><div class="billing-card-v46"><div><span>Harga</span><strong>${Number(meta?.monthly_price||0)===0?'Gratis':`Rp ${Number(meta.monthly_price).toLocaleString('id-ID')} / bulan`}</strong></div><div><span>Status</span><strong>${active?'Aktif':'Belum aktif'}</strong></div><div><span>Upgrade</span><strong>WhatsApp + bukti transfer</strong></div></div></section>`;
-    document.getElementById('change-plan').onclick=()=>renderPlanChoice(document.getElementById('organizer-content'),orgId);
+    const currentEntitlements=entitlements.filter(e=>e.plan_code===current);
+
+    root.innerHTML=`<div class="plan-usage-page-v46">
+      <section class="plan-usage-header-v46"><div><span class="eyebrow">PLAN & USAGE</span><h2>${esc(meta?.name||current)}</h2><p>${active?`Aktif sejak ${fmt(active.starts_at)}.`:'Belum ada paket aktif.'} Paket aktif menjadi sumber entitlement dan quota workspace.</p></div><div class="plan-usage-actions"><span class="plan-badge ${current.toLowerCase()}">${esc(meta?.badge||current)}</span><span class="plan-state-badge">✓ Digunakan</span></div></section>
+      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">PAKET AKTIF</span><h3>${esc(meta?.name||current)}</h3></div><span class="chip">${active?'AKTIF':'DEFAULT'}</span></div><div class="plan-entitlement-grid-v46">${currentEntitlements.map(e=>`<div class="entitlement-card-v46"><span>✓</span><div><strong>${esc(e.capability.replaceAll('_',' '))}</strong><small>${e.limit_value==null?'Tanpa batas':`Limit ${Number(e.limit_value).toLocaleString('id-ID')}`}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk paket ini.</p>'}</div></section>
+      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">UPGRADE</span><h3>Pilih tingkat yang lebih tinggi</h3><p class="muted">Paket aktif tidak dapat diturunkan. Hanya upgrade yang tersedia untuk dipesan.</p></div></div><div id="plan-upgrade-list"></div></section>
+      <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">BILLING</span><h3>Status paket & pembayaran</h3></div></div><div class="billing-card-v46"><div><span>Harga aktif</span><strong>${Number(meta?.monthly_price||0)===0?'Gratis':`Rp ${Number(meta.monthly_price).toLocaleString('id-ID')} / bulan`}</strong></div><div><span>Status</span><strong>${active?'Aktif':'Belum aktif'}</strong></div><div><span>Upgrade</span><strong>${pending?'Menunggu review Admin':'Pesan via WhatsApp + bukti transfer'}</strong></div></div></section>
+    </div>`;
+
+    await renderPlanChoice(document.getElementById('plan-upgrade-list'),orgId,active);
   }
     window.SYKA_PAGE_ORGANIZER={render};
 })();

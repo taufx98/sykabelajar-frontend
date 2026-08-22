@@ -2,7 +2,7 @@
   const existing = window.SYKA_CONFIG || {};
   window.SYKA_CONFIG = Object.freeze({
     APP_NAME: 'Sykabelajar.id',
-    APP_VERSION: '4.6.1-production-polish',
+    APP_VERSION: '4.6.2-plan-upgrade-only',
     ROUTE_MODE: existing.ROUTE_MODE || 'query',
     APP_PAGE: existing.APP_PAGE || '/p/app.html',
     ASSET_BASE_URL: existing.ASSET_BASE_URL || './dist',

@@ -1,4 +1,4 @@
-# Sykabelajar Frontend v4.6.1 — Production Polish
+# Sykabelajar Frontend v4.6.2 — Production Polish
 
 Baseline frontend for `sykabelajar.id` using Blogger as the application shell, Supabase as source of truth, and Cloudinary for media.
 

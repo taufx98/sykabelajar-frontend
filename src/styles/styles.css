@@ -60,7 +60,7 @@
 @media (max-width: 760px){.store-hero{flex-direction:column;align-items:flex-start;padding:20px}.store-audience{width:100%;box-sizing:border-box}.store-grid{grid-template-columns:1fr}.plan-preset-grid{grid-template-columns:1fr}.plan-editor-head{flex-direction:column}.plan-editor-price{width:100%;grid-template-columns:1fr 1fr}.plan-feature-row{grid-template-columns:28px 1fr 88px}.guide-grid{grid-template-columns:1fr}.product-admin-row{align-items:flex-start;flex-direction:column}.product-admin-meta{width:100%;justify-content:space-between}.section-head{align-items:flex-start;flex-direction:column}}
 
 /* =====================================================================
-   SYKABELAJAR v4.6.1 PRODUCTION POLISH
+   SYKABELAJAR v4.6.2 PLAN UPGRADE-ONLY
    ===================================================================== */
 :root{
   --shadow-lg:0 18px 55px rgba(15,23,42,.08);
@@ -129,3 +129,15 @@
 /* Responsive */
 @media(max-width:1000px){.competition-detail-v46{grid-template-columns:1fr}.competition-detail-main{padding:0}.plan-choice-grid-v46{grid-template-columns:1fr}.account-type-grid{grid-template-columns:1fr}.orders-admin-grid,.orders-grid-v46{grid-template-columns:1fr}.assignment-row{align-items:flex-start;flex-direction:column}.assignment-actions{width:100%}.assignment-actions select{flex:1;min-width:0}}
 @media(max-width:760px){.timeline-grid-v46,.detail-grid-v46,.prep-grid-v46,.billing-card-v46{grid-template-columns:1fr}.competition-detail-cover,.competition-detail-cover img,.competition-cover-empty{min-height:300px;height:300px}.competition-detail-main h1{font-size:42px}.plan-usage-header-v46{flex-direction:column}.plan-entitlement-grid-v46{grid-template-columns:1fr}.order-summary-grid{grid-template-columns:1fr}.profile-identity{position:static}.competition-meta-v46{grid-template-columns:1fr}.upload-preview img{height:180px}}
+
+/* v4.6.2 plan lifecycle states */
+.plan-choice-card-v46.is-current{border-color:color-mix(in srgb,var(--brand) 45%,var(--border));background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 5%,var(--surface)),var(--surface));box-shadow:0 16px 44px color-mix(in srgb,var(--brand) 10%,transparent)}
+.plan-choice-card-v46.is-lower{opacity:.62;filter:saturate(.75)}
+.plan-card-action-v46{margin-top:18px}
+.btn-used{background:#10b98112;border-color:#10b98135;color:var(--success);cursor:not-allowed}
+.btn-disabled{background:var(--surface2);border-color:var(--border);color:var(--muted);cursor:not-allowed}
+.plan-state-badge{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:999px;background:#10b98112;color:var(--success);font-size:9px;font-weight:900;border:1px solid #10b9812e}
+.plan-current-banner-v46{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border:1px solid var(--border);border-radius:20px;background:linear-gradient(135deg,color-mix(in srgb,var(--brand) 7%,var(--surface)),var(--surface));margin-bottom:16px}
+.plan-current-banner-v46 h2{margin:5px 0 4px;font-size:24px;letter-spacing:-.04em}.plan-current-banner-v46 p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
+.plan-pending-strip-v46{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border-radius:16px;border:1px solid #f59e0b33;background:#f59e0b0b;margin-bottom:16px}.plan-pending-strip-v46 strong,.plan-pending-strip-v46 span{display:block}.plan-pending-strip-v46 span{font-size:9px;color:var(--muted);margin-top:3px}
+@media(max-width:760px){.plan-current-banner-v46,.plan-pending-strip-v46{flex-direction:column;align-items:flex-start}.plan-choice-card-v46.is-lower{opacity:.7}}
