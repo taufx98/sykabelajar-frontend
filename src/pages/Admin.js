@@ -1,41 +1,564 @@
-(function(){
-  const svc=()=>window.SYKA_CONTROL_SERVICE; const esc=v=>window.SYKA_UTILS.escapeHtml(v); const fmt=v=>window.SYKA_UTILS.formatDate(v);
-  const tabs=[
-    ['dashboard','Dashboard'],['users','Users'],['competitions','Competitions'],['questions','Questions'],['twibbon','Twibbon'],['results','Results'],['certificates','Certificates'],['orders','Orders'],['moderation','UGC Moderation'],['plans','Plans'],['settings','Settings'],['audit','Audit']
-  ];
-  function shell(tab){return `<div class="control-head"><div><span class="eyebrow">ADMIN CONTROL PLANE</span><h1>Panel Admin</h1><p>Platform-wide management, moderation, audit, settings, dan privileged workflows.</p></div></div><div class="control-tabs">${tabs.map(([k,l])=>`<a href="${window.SYKA_ROUTER.href('/admin')}&tab=${encodeURIComponent(k)}" class="control-tab ${k===tab?'active':''}" data-route-link>${l}</a>`).join('')}</div><div id="control-content"><div class="page-loading"><div class="loading-spinner"></div></div></div>`;}
-  async function render(root){const auth=window.SYKA_STATE.getState().auth;if(!auth.user){root.innerHTML=window.SYKA_EMPTY.render({title:'Masuk diperlukan',text:'Panel admin hanya untuk administrator.'})+'<div class="control-center"><button class="btn btn-primary" id="admin-login">Masuk</button></div>';document.getElementById('admin-login').onclick=()=>window.SYKA_APP.openAuth('login');return;}if(!auth.roles.includes('admin')){root.innerHTML=window.SYKA_EMPTY.render({title:'Akses ditolak',text:'Akun ini tidak memiliki role admin.'});return;}const tab=window.SYKA_STATE.getState().route.query.tab||'dashboard';root.innerHTML=shell(tabs.some(x=>x[0]===tab)?tab:'dashboard');root.querySelectorAll('[data-route-link]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const u=new URL(a.href);window.SYKA_ROUTER.navigate('/admin');const current=window.SYKA_STATE.getState().route.query;current.tab=u.searchParams.get('tab')||'dashboard';window.history.replaceState({},'',u.pathname+'&tab='+encodeURIComponent(current.tab));window.SYKA_ROUTER.refresh();}));await renderTab(document.getElementById('control-content'),tab);}
-  async function renderTab(root,tab){try{if(tab==='dashboard')return dashboard(root);if(tab==='users')return users(root);if(tab==='competitions')return competitions(root);if(tab==='questions')return questions(root);if(tab==='twibbon')return twibbon(root);if(tab==='results')return results(root);if(tab==='certificates')return certificates(root);if(tab==='orders')return orders(root);if(tab==='moderation')return moderation(root);if(tab==='plans')return plans(root);if(tab==='settings')return settings(root);if(tab==='audit')return audit(root);}catch(e){root.innerHTML=window.SYKA_EMPTY.render({title:'Modul gagal dimuat',text:e.message||'Periksa migration/RLS.'});}}
-  function kpis(items){return `<div class="admin-kpi-grid">${items.map(x=>`<div class="syka-card admin-kpi"><strong>${esc(x.v)}</strong><span>${esc(x.l)}</span></div>`).join('')}</div>`;}
-  async function dashboard(root){const [stats,comps,regs,users,audit]=await Promise.all([window.SYKA_ADMIN_SERVICE.platformStats(),svc().listCompetitionsAdmin({limit:300}),svc().listRegistrations({}),svc().listUsers({limit:300}),svc().listAudit({limit:12})]);root.innerHTML=kpis([{v:Number(stats.total_students||0).toLocaleString('id-ID'),l:'Siswa'},{v:Number(stats.total_schools||0).toLocaleString('id-ID'),l:'Sekolah'},{v:Number(stats.total_award_recipients||0).toLocaleString('id-ID'),l:'Penerima prestasi'},{v:Number(stats.total_champions||0).toLocaleString('id-ID'),l:'Juara'}])+`<div class="control-grid-2"><section class="syka-card admin-section"><div class="admin-section-head"><div><span class="eyebrow">OVERVIEW</span><h2>Status platform</h2></div></div><div class="mini-stat-grid"><div><b>${users.length}</b><span>Users loaded</span></div><div><b>${comps.length}</b><span>Competitions</span></div><div><b>${regs.length}</b><span>Registrations</span></div><div><b>${audit.length}</b><span>Audit events</span></div></div></section><section class="syka-card admin-section"><div class="admin-section-head"><div><span class="eyebrow">AUDIT</span><h2>Aktivitas terakhir</h2></div></div>${audit.length?audit.map(a=>`<div class="admin-row"><div><strong>${esc(a.action)}</strong><small>${esc(a.entity_type)} ${esc(a.entity_id||'')}</small></div><small>${fmt(a.created_at)}</small></div>`).join(''):window.SYKA_EMPTY.render({title:'Belum ada audit',text:'Aktivitas privileged akan muncul di sini.'})}</section></div>`;}
-  async function users(root){const rows=await svc().listUsers({limit:200});root.innerHTML=`<div class="control-local-head"><div><h2>Users</h2><span>${rows.length} pengguna</span></div><input id="admin-user-search" placeholder="Cari nama, username, sekolah..." class="control-search"></div><div class="admin-table" id="admin-users">${rows.map(u=>`<div class="admin-row"><div class="row-main"><div class="avatar-mini">${u.avatar_url?`<img src="${esc(u.avatar_url)}" alt="">`:esc(window.SYKA_UTILS.initials(u.full_name))}</div><div><strong>${esc(u.full_name||u.username||'Tanpa nama')}</strong><small>@${esc(u.username||'—')} · ${esc(u.institution||'—')} · ${esc(u.grade||'—')}</small><div class="chip-row">${u.roles.map(r=>`<span class="chip">${esc(r.role)}${r.is_active?'':' (off)'}</span>`).join('')}<span class="chip ${u.status!=='ACTIVE'?'chip-warn':''}">${esc(u.status)}</span></div></div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-user-status="${u.id}" data-status="${u.status==='ACTIVE'?'SUSPENDED':'ACTIVE'}">${u.status==='ACTIVE'?'Suspend':'Aktifkan'}</button><button class="btn btn-primary btn-sm" data-user-role="${u.id}">Role</button></div></div>`).join('')}</div>`;bindUserSearch(rows);root.querySelectorAll('[data-user-status]').forEach(b=>b.onclick=async()=>{try{await svc().setUserStatus(b.dataset.userStatus,b.dataset.status,'Admin control plane');window.SYKA_TOAST.show('Status pengguna diperbarui.','success');renderTab(root,'users');}catch(e){window.SYKA_TOAST.show(e.message,'error');}});root.querySelectorAll('[data-user-role]').forEach(b=>b.onclick=()=>roleModal(b.dataset.userRole));}
-  function bindUserSearch(rows){const i=document.getElementById('admin-user-search');i.oninput=()=>{const q=i.value.toLowerCase();document.querySelectorAll('#admin-users .admin-row').forEach(r=>r.style.display=r.innerText.toLowerCase().includes(q)?'flex':'none');};}
-  function roleModal(userId){window.SYKA_MODAL.open({title:'Atur role pengguna',html:`<form id="role-form" class="form-card"><label>Role<select id="role"><option value="student">Pelajar</option><option value="teacher">Guru</option><option value="organizer_member">Organizer</option><option value="admin">Admin</option></select></label><label class="checkline"><input id="active" type="checkbox" checked> Aktif</label><label>Alasan<textarea id="reason" placeholder="Alasan perubahan role"></textarea></label><button class="btn btn-primary">Simpan</button><div id="role-feedback"></div></form>`,onOpen:body=>body.querySelector('#role-form').onsubmit=async e=>{e.preventDefault();try{await svc().setUserRole(userId,body.querySelector('#role').value,body.querySelector('#active').checked,body.querySelector('#reason').value);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Role diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#role-feedback').innerHTML=`<div class="inline-error">${esc(err.message)}</div>`;}}});}
-  async function competitions(root){const rows=await svc().listCompetitionsAdmin({limit:200});root.innerHTML=`<div class="control-local-head"><div><h2>Competitions</h2><span>CRUD, state transition, level/reward tersedia.</span></div><button class="btn btn-primary" id="admin-comp-new">+ Kompetisi</button></div><div class="admin-table">${rows.length?rows.map(c=>`<div class="admin-row"><div><strong>${esc(c.title)}</strong><small>${esc(c.category)} · ${esc(c.slug)} · ${esc(c.visibility)}</small><div class="chip-row"><span class="chip">${esc(c.status)}</span>${c.registration_ends_at?`<span class="chip">Pendaftaran sampai ${fmt(c.registration_ends_at)}</span>`:''}</div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-comp-edit="${c.id}">Edit</button><button class="btn btn-ghost btn-sm" data-comp-config="${c.id}">Config</button><button class="btn btn-primary btn-sm" data-comp-next="${c.id}">Transisi</button></div></div>`).join(''):window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi pertama.'})}</div>`;root.querySelector('#admin-comp-new').onclick=()=>competitionModal(null);root.querySelectorAll('[data-comp-edit]').forEach(b=>b.onclick=()=>competitionModal(rows.find(x=>x.id===b.dataset.compEdit)));root.querySelectorAll('[data-comp-next]').forEach(b=>b.onclick=()=>transitionModal(rows.find(x=>x.id===b.dataset.compNext)));root.querySelectorAll('[data-comp-config]').forEach(b=>b.onclick=()=>competitionConfigModal(rows.find(x=>x.id===b.dataset.compConfig)));}
-  function competitionModal(current){const p=current||{};window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Tambah kompetisi',wide:true,html:`<form id="comp-form" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><label>Deskripsi singkat<textarea id="short">${esc(p.short_description||'')}</textarea></label><label>Kategori<input id="category" value="${esc(p.category||'Kompetisi')}"></label><div class="form-grid-2"><label>Registration start<input id="rs" type="datetime-local"></label><label>Registration end<input id="re" type="datetime-local"></label></div><div class="form-grid-2"><label>Start<input id="s" type="datetime-local"></label><label>End<input id="e" type="datetime-local"></label></div><label>Announcement<input id="a" type="datetime-local"></label><div class="form-actions"><button class="btn btn-ghost" type="button" data-close>Batal</button><button class="btn btn-primary">Simpan</button></div><div id="feedback"></div></form>`,onOpen:body=>{const form=body.querySelector('#comp-form');const set=(id,v)=>{if(v)body.querySelector(id).value=new Date(v).toISOString().slice(0,16);};set('#rs',p.registration_starts_at);set('#re',p.registration_ends_at);set('#s',p.starts_at);set('#e',p.ends_at);set('#a',p.announcement_at);form.onsubmit=async e=>{e.preventDefault();const rs=x=>x?new Date(x).toISOString():null;try{const title=form.querySelector('#title').value.trim();const slug=form.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,'');await svc().saveCompetition({title,slug,short_description:form.querySelector('#short').value.trim(),category:form.querySelector('#category').value.trim()||'Kompetisi',registration_starts_at:rs(form.querySelector('#rs').value),registration_ends_at:rs(form.querySelector('#re').value),starts_at:rs(form.querySelector('#s').value),ends_at:rs(form.querySelector('#e').value),announcement_at:rs(form.querySelector('#a').value),visibility:'PUBLIC'},current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Kompetisi tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(err){form.querySelector('#feedback').innerHTML=`<div class="inline-error">${esc(err.message)}</div>`;}};}});}
-  async function competitionConfigModal(c){
-    try{
-      const [levels,rules,rewards]=await Promise.all([svc().listLevels(c.id),svc().getRegistrationRules(c.id),svc().listRewards(c.id)]);
-      window.SYKA_MODAL.open({title:'Competition configuration',wide:true,html:`<div class="form-card"><div class="control-grid-2"><section><h3>Eligibility / Rules</h3><label>Allowed grades (comma separated)<textarea id="rules-grades">${esc((rules?.allowed_grades||[]).join(', '))}</textarea></label><div class="form-grid-2"><label>Max participants<input id="rules-max" type="number" value="${rules?.max_participants??''}"></label><label>Express cost<input id="rules-cost" type="number" value="${rules?.express_cost??0}"></label></div><label class="checkline"><input id="rules-tw" type="checkbox" ${rules?.require_twibbon?'checked':''}> Require twibbon</label><label class="checkline"><input id="rules-social" type="checkbox" ${rules?.require_social_proof?'checked':''}> Require social proof</label><label class="checkline"><input id="rules-express" type="checkbox" ${rules?.express_enabled?'checked':''}> Express registration</label><button class="btn btn-primary btn-sm" id="save-rules">Simpan rules</button></section><section><h3>Level</h3><div class="admin-table">${levels.map(l=>`<div class="admin-row"><div><strong>${esc(l.label)}</strong><small>${esc(l.code)} · ${esc((l.allowed_grades||[]).join(', '))} · ${l.points} pts</small></div></div>`).join('')||'<p class="muted">Belum ada level.</p>'}</div><button class="btn btn-ghost btn-sm" id="new-level">+ Level</button><h3 style="margin-top:16px">Reward</h3><div class="admin-table">${rewards.map(r=>`<div class="admin-row"><div><strong>${esc(r.rank_code)}</strong><small>${esc(r.title||'')} · ${r.points} pts · ${esc(r.emblem_name||'')}</small></div></div>`).join('')||'<p class="muted">Belum ada reward.</p>'}</div><button class="btn btn-ghost btn-sm" id="new-reward">+ Reward</button></section></div><div id="cfg-feedback"></div></div>`,onOpen:body=>{body.querySelector('#save-rules').onclick=async()=>{try{await svc().saveRegistrationRules({allowed_grades:body.querySelector('#rules-grades').value.split(',').map(x=>x.trim()).filter(Boolean),max_participants:body.querySelector('#rules-max').value?Number(body.querySelector('#rules-max').value):null,express_cost:Number(body.querySelector('#rules-cost').value||0),require_twibbon:body.querySelector('#rules-tw').checked,require_social_proof:body.querySelector('#rules-social').checked,express_enabled:body.querySelector('#rules-express').checked},c.id);window.SYKA_TOAST.show('Rules tersimpan.','success');}catch(e){body.querySelector('#cfg-feedback').innerHTML=`<div class="inline-error">${esc(e.message)}</div>`;}};body.querySelector('#new-level').onclick=()=>smallLevelModal(c.id);body.querySelector('#new-reward').onclick=()=>smallRewardModal(c.id);}});
-    }catch(e){window.SYKA_TOAST.show(e.message,'error');}
-  }
-  function smallLevelModal(cid){window.SYKA_MODAL.open({title:'Tambah level',html:`<form id="lvf" class="form-card"><label>Code<input id="code" required></label><label>Label<input id="label" required></label><label>Allowed grades<input id="grades" placeholder="6 SD,7 SMP"></label><label>Points<input id="points" type="number" value="0"></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:body=>body.querySelector('#lvf').onsubmit=async e=>{e.preventDefault();try{await svc().saveLevel({competition_id:cid,code:body.querySelector('#code').value.trim(),label:body.querySelector('#label').value.trim(),allowed_grades:body.querySelector('#grades').value.split(',').map(x=>x.trim()).filter(Boolean),points:Number(body.querySelector('#points').value||0)});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Level dibuat.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#lvf').insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(err.message)}</div>`);}}});}
-  function smallRewardModal(cid){window.SYKA_MODAL.open({title:'Tambah reward',html:`<form id="rwf" class="form-card"><label>Rank code<input id="rank" placeholder="1ST" required></label><label>Title<input id="title"></label><label>Points<input id="points" type="number" value="0"></label><label>Emblem<input id="emblem"></label><label class="checkline"><input id="cert" type="checkbox" checked> Certificate</label><button class="btn btn-primary">Simpan</button></form>`,onOpen:body=>body.querySelector('#rwf').onsubmit=async e=>{e.preventDefault();try{await svc().saveReward({competition_id:cid,rank_code:body.querySelector('#rank').value.trim(),title:body.querySelector('#title').value.trim()||null,points:Number(body.querySelector('#points').value||0),emblem_name:body.querySelector('#emblem').value.trim()||null,certificate_enabled:body.querySelector('#cert').checked});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Reward dibuat.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#rwf').insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(err.message)}</div>`);}}});}
-  function transitionModal(c){const order=['PUBLISHED','REGISTRATION_OPEN','REGISTRATION_CLOSED','LIVE','SUBMISSION_CLOSED','GRADING','RESULT_PUBLISHED','ARCHIVED','SUSPENDED','CANCELLED'];window.SYKA_MODAL.open({title:'Ubah status kompetisi',html:`<form id="tr-form" class="form-card"><p>Status saat ini: <b>${esc(c.status)}</b></p><label>Status tujuan<select id="to">${order.map(s=>`<option>${s}</option>`).join('')}</select></label><label>Alasan<textarea id="reason"></textarea></label><button class="btn btn-primary">Simpan transisi</button><div id="fb"></div></form>`,onOpen:body=>body.querySelector('#tr-form').onsubmit=async e=>{e.preventDefault();try{await svc().transitionCompetition(c.id,body.querySelector('#to').value,body.querySelector('#reason').value);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Status kompetisi berubah.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#fb').innerHTML=`<div class="inline-error">${esc(err.message)}</div>`;}}});}
-  async function questions(root){const [banks,qs]=await Promise.all([svc().listQuestionBanks(),svc().listQuestions({})]);root.innerHTML=`<div class="control-local-head"><div><h2>Questions Builder</h2><span>Bank soal, builder, moderation, dan answer key.</span></div><div class="row-actions"><button class="btn btn-ghost btn-sm" id="new-bank">+ Bank</button><button class="btn btn-primary btn-sm" id="new-q">+ Soal</button></div></div><div class="control-grid-2"><section><h3>Question Banks</h3><div class="admin-table">${banks.map(b=>`<div class="admin-row"><div><strong>${esc(b.name)}</strong><small>${esc(b.status)} · ${esc(b.description||'')}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada bank soal',text:'Buat bank soal pertama.'})}</div></section><section><h3>Questions</h3><div class="admin-table">${qs.map(q=>`<div class="admin-row"><div><strong>${esc(q.prompt)}</strong><small>${esc(q.type)} · ${q.points} poin · ${esc(q.status)}</small></div><button class="btn btn-ghost btn-sm" data-q-edit="${q.id}">Edit</button></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada soal',text:'Tambahkan soal.'})}</div></section></div>`;root.querySelector('#new-bank').onclick=()=>bankModal();root.querySelector('#new-q').onclick=()=>questionModal();root.querySelectorAll('[data-q-edit]').forEach(b=>b.onclick=()=>questionModal(qs.find(x=>x.id===b.dataset.qEdit)));}
-  function bankModal(){window.SYKA_MODAL.open({title:'Question Bank',html:`<form id="bank-form" class="form-card"><label>Nama *<input id="name" required></label><label>Deskripsi<textarea id="desc"></textarea></label><label>Status<select id="status"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option></select></label><button class="btn btn-primary">Simpan</button><div id="fb"></div></form>`,onOpen:body=>body.querySelector('#bank-form').onsubmit=async e=>{e.preventDefault();try{const a=window.SYKA_STATE.getState().auth;const memberships=await window.SYKA_ADMIN_SERVICE.listMyOrganizerMemberships(a.user.id);const organizerId=memberships[0]?.organizer_id||null;await svc().saveQuestionBank({name:body.querySelector('#name').value.trim(),description:body.querySelector('#desc').value.trim(),status:body.querySelector('#status').value,organizer_id:organizerId,owner_user_id:a.user.id});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Bank soal tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#fb').innerHTML=`<div class="inline-error">${esc(err.message)}</div>`;}}});}
-  function questionModal(current){const p=current||{};window.SYKA_MODAL.open({title:current?'Edit soal':'Tambah soal',wide:true,html:`<form id="q-form" class="form-card"><label>Pertanyaan *<textarea id="prompt" required>${esc(p.prompt||'')}</textarea></label><div class="form-grid-2"><label>Type<select id="type"><option value="multiple_choice">Multiple choice</option><option value="checkbox">Checkbox</option><option value="essay">Essay</option><option value="file">File</option></select></label><label>Poin<input id="points" type="number" step="0.5" value="${p.points||1}"></label></div><label>Competition ID (opsional)<input id="cid" value="${esc(p.competition_id||'')}"></label><label>Status<select id="status"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option></select></label><div class="form-actions"><button class="btn btn-primary">Simpan</button></div><div id="fb"></div></form>`,onOpen:body=>body.querySelector('#q-form').onsubmit=async e=>{e.preventDefault();try{await svc().saveQuestion({prompt:body.querySelector('#prompt').value.trim(),type:body.querySelector('#type').value,points:Number(body.querySelector('#points').value||1),required:true,competition_id:body.querySelector('#cid').value.trim()||null,status:body.querySelector('#status').value,config:{}},current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Soal tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#fb').innerHTML=`<div class="inline-error">${esc(err.message)}</div>`;}}});}
-  async function twibbon(root){const rows=await svc().listTwibbonTemplates({});root.innerHTML=`<div class="control-local-head"><div><h2>Twibbon Templates</h2><span>Template dan konfigurasi submission.</span></div><button class="btn btn-primary" id="new-tw">+ Template</button></div><div class="admin-table">${rows.map(t=>`<div class="admin-row"><div><strong>${esc(t.name)}</strong><small>${esc(t.competition_id||'Global')} · ${t.is_required?'Wajib':'Opsional'} · ${t.is_active?'Aktif':'Nonaktif'}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada template',text:'Tambahkan template twibbon.'})}</div>`;root.querySelector('#new-tw').onclick=()=>twibbonModal();}
-  function twibbonModal(){window.SYKA_MODAL.open({title:'Twibbon template',html:`<form id="tw-form" class="form-card"><label>Nama *<input id="name" required></label><label>Competition ID<input id="cid"></label><label>Image URL<input id="url"></label><label>Public ID<input id="pid"></label><label class="checkline"><input id="req" type="checkbox"> Wajib</label><button class="btn btn-primary">Simpan</button><div id="fb"></div></form>`,onOpen:body=>body.querySelector('#tw-form').onsubmit=async e=>{e.preventDefault();try{await svc().saveTwibbonTemplate({name:body.querySelector('#name').value.trim(),competition_id:body.querySelector('#cid').value.trim()||null,image_url:body.querySelector('#url').value.trim()||null,public_id:body.querySelector('#pid').value.trim()||null,is_required:body.querySelector('#req').checked});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Template tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#fb').innerHTML=`<div class="inline-error">${esc(err.message)}</div>`;}}});}
-  async function results(root){const rows=await svc().listAttempts({});root.innerHTML=`<div class="control-local-head"><div><h2>Results</h2><span>Grade moderation dan finalisasi.</span></div></div><div class="admin-table">${rows.map(a=>`<div class="admin-row"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · ${esc(a.status)} · score ${a.score}</small></div><button class="btn btn-primary btn-sm" data-final="${a.id}" ${a.status==='FINALIZED'?'disabled':''}>Finalize</button></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada attempt',text:'Attempt peserta akan muncul saat lomba berjalan.'})}</div>`;root.querySelectorAll('[data-final]').forEach(b=>b.onclick=()=>finalizeModal(b.dataset.final));}
-  function finalizeModal(id){window.SYKA_MODAL.open({title:'Finalisasi hasil',html:`<form id="fin-form" class="form-card"><label>Score final<input id="score" type="number" step="0.01"></label><label>Alasan<textarea id="reason"></textarea></label><button class="btn btn-primary">Finalisasi</button></form>`,onOpen:body=>body.querySelector('#fin-form').onsubmit=async e=>{e.preventDefault();try{await svc().finalizeAttempt(id,Number(body.querySelector('#score').value));window.SYKA_MODAL.close();window.SYKA_TOAST.show('Attempt difinalisasi.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#fin-form').insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(err.message)}</div>`);}}});}
-  async function certificates(root){const rows=await svc().listCertificates({});root.innerHTML=`<div class="control-local-head"><div><h2>Certificates</h2><span>Generate, review, issue, revoke.</span></div></div><div class="admin-table">${rows.map(x=>`<div class="admin-row"><div><strong>${esc(x.profiles?.full_name||x.user_id)}</strong><small>${esc(x.competitions?.title||'')} · ${esc(x.status)} · rev ${x.current_revision}</small></div><div class="row-actions">${['GENERATED','REVIEW','APPROVED','PUBLISHED','REVOKED'].map(s=>`<button class="btn btn-ghost btn-sm" data-cert="${x.id}" data-status="${s}">${s}</button>`).join('')}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada certificate',text:'Certificate event akan muncul setelah result.'})}</div>`;root.querySelectorAll('[data-cert]').forEach(b=>b.onclick=async()=>{try{await svc().updateCertificate(b.dataset.cert,b.dataset.status);window.SYKA_TOAST.show('Status certificate diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(e){window.SYKA_TOAST.show(e.message,'error');}});}
-  async function orders(root){const rows=await svc().listOrders({});root.innerHTML=`<div class="control-local-head"><div><h2>Orders</h2><span>Payment, fulfillment, tracking.</span></div></div><div class="admin-table">${rows.map(o=>`<div class="admin-row"><div><strong>${esc(o.profiles?.full_name||o.user_id)}</strong><small>${esc(o.id)} · ${esc(o.status)} · Rp ${Number(o.total||0).toLocaleString('id-ID')}</small></div><select class="compact-select" data-order="${o.id}">${['DRAFT','PENDING_PAYMENT','PAID','PROCESSING','SHIPPED','COMPLETED','REFUNDED','CANCELLED'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada order',text:'Order peserta akan muncul di sini.'})}</div>`;root.querySelectorAll('[data-order]').forEach(s=>s.onchange=async()=>{try{await svc().updateOrder(s.dataset.order,s.value);window.SYKA_TOAST.show('Order diperbarui.','success');}catch(e){window.SYKA_TOAST.show(e.message,'error');}});}
-  async function moderation(root){const m=await svc().listModeration();root.innerHTML=`<div class="control-grid-2"><section><h2>Questions UGC</h2><div id="ugc-questions" class="admin-table"><p class="muted">Memuat…</p></div></section><section><h2>Posts</h2><div class="admin-table">${m.posts.map(p=>`<div class="admin-row"><div><strong>${esc(p.title)}</strong><small>${esc(p.status)} · ${fmt(p.created_at)}</small></div><select class="compact-select" data-post="${p.id}"><option>PUBLISHED</option><option>HIDDEN</option><option>ARCHIVED</option></select></div>`).join('')||window.SYKA_EMPTY.render({title:'Tidak ada post',text:'Moderasi post akan muncul.'})}</div></section><section><h2>Comments</h2><div class="admin-table">${m.comments.map(p=>`<div class="admin-row"><div><strong>${esc(p.body).slice(0,100)}</strong><small>${esc(p.moderation_state)} · ${fmt(p.created_at)}</small></div><select class="compact-select" data-comment="${p.id}"><option>PUBLISHED</option><option>HIDDEN</option><option>QUARANTINED</option></select></div>`).join('')||window.SYKA_EMPTY.render({title:'Tidak ada comment',text:'Moderasi komentar akan muncul.'})}</div></section></div>`;(async()=>{try{const qs=await svc().listQuestions({});const box=document.getElementById('ugc-questions');box.innerHTML=qs.map(q=>`<div class="admin-row"><div><strong>${esc(q.prompt)}</strong><small>${esc(q.status)} · ${esc(q.type)}</small></div><select class="compact-select" data-ugc="${q.id}"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option><option>QUARANTINED</option><option>ARCHIVED</option></select></div>`).join('')||'<p class="muted">Tidak ada question UGC.</p>';box.querySelectorAll('[data-ugc]').forEach(s=>s.onchange=async()=>{try{await svc().moderateQuestion(s.dataset.ugc,s.value);window.SYKA_TOAST.show('Question dimoderasi.','success');}catch(e){window.SYKA_TOAST.show(e.message,'error');}});}catch(e){document.getElementById('ugc-questions').innerHTML='<p class="muted">Tidak dapat memuat UGC question.</p>';}})();root.querySelectorAll('[data-post]').forEach(s=>s.onchange=async()=>{try{await svc().moderatePost(s.dataset.post,s.value);window.SYKA_TOAST.show('Post dimoderasi.','success');}catch(e){window.SYKA_TOAST.show(e.message,'error');}});root.querySelectorAll('[data-comment]').forEach(s=>s.onchange=async()=>{try{await svc().moderateComment(s.dataset.comment,s.value);window.SYKA_TOAST.show('Comment dimoderasi.','success');}catch(e){window.SYKA_TOAST.show(e.message,'error');}});}
-  async function plans(root){const [plans,ents]=await Promise.all([svc().listPlans(),svc().listEntitlements()]);root.innerHTML=`<div class="control-grid-2"><section><h2>Organizer Plans</h2><div class="admin-table">${plans.map(p=>`<div class="admin-row"><div><strong>${esc(p.plan_code)}</strong><small>${esc(p.organizer_id)} · ${fmt(p.starts_at)}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada plan',text:'Plan organizer akan muncul setelah ditetapkan.'})}</div></section><section><div class="control-local-head"><h2>Entitlements</h2><button class="btn btn-primary btn-sm" id="new-ent">+ Entitlement</button></div><div class="admin-table">${ents.map(e=>`<div class="admin-row"><div><strong>${esc(e.plan_code)} · ${esc(e.capability)}</strong><small>Limit: ${e.limit_value??'—'}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada entitlement',text:'Tambahkan capability per plan.'})}</div></section></div>`;root.querySelector('#new-ent').onclick=()=>entitlementModal();}
-  function entitlementModal(){window.SYKA_MODAL.open({title:'Plan entitlement',html:`<form id="ent-form" class="form-card"><label>Plan<select id="plan"><option>FREE</option><option>PRO</option><option>PREMIUM</option></select></label><label>Capability<input id="cap" required placeholder="competition_publish"></label><label>Limit<input id="limit" type="number"></label><label>Config JSON<textarea id="config">{}</textarea></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:body=>body.querySelector('#ent-form').onsubmit=async e=>{e.preventDefault();try{await svc().saveEntitlement({plan_code:body.querySelector('#plan').value,capability:body.querySelector('#cap').value.trim(),limit_value:body.querySelector('#limit').value?Number(body.querySelector('#limit').value):null,config:JSON.parse(body.querySelector('#config').value||'{}')});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Entitlement tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#ent-form').insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(err.message)}</div>`);}}});}
-  async function settings(root){const [flags,settings]=await Promise.all([svc().listFlags(),svc().listSettings()]);root.innerHTML=`<div class="control-grid-2"><section><h2>Feature Flags</h2><div class="admin-table">${flags.map(f=>`<div class="admin-row"><div><strong>${esc(f.key)}</strong><small>${f.enabled?'Enabled':'Disabled'}</small></div><button class="btn btn-ghost btn-sm" data-flag="${esc(f.key)}" data-enabled="${!f.enabled}">${f.enabled?'Matikan':'Nyalakan'}</button></div>`).join('')}</div></section><section><h2>Global Settings</h2><div class="admin-table">${settings.map(s=>`<div class="admin-row"><div><strong>${esc(s.key)}</strong><small>${esc(JSON.stringify(s.value))}</small></div><button class="btn btn-ghost btn-sm" data-setting="${esc(s.key)}">Edit</button></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada settings',text:'Global setting dapat disimpan dari sini.'})}</div></section></div>`;root.querySelectorAll('[data-flag]').forEach(b=>b.onclick=async()=>{try{await svc().setFlag(b.dataset.flag,b.dataset.enabled==='true',{});window.SYKA_TOAST.show('Feature flag diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(e){window.SYKA_TOAST.show(e.message,'error');}});root.querySelectorAll('[data-setting]').forEach(b=>b.onclick=()=>settingModal(b.dataset.setting));}
-  function settingModal(key){window.SYKA_MODAL.open({title:'Global setting',html:`<form id="set-form" class="form-card"><label>Key<input id="key" value="${esc(key||'')}" required></label><label>Value JSON<textarea id="value">{}</textarea></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:body=>body.querySelector('#set-form').onsubmit=async e=>{e.preventDefault();try{await svc().setSetting(body.querySelector('#key').value.trim(),JSON.parse(body.querySelector('#value').value||'{}'));window.SYKA_MODAL.close();window.SYKA_TOAST.show('Setting tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(err){body.querySelector('#set-form').insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(err.message)}</div>`);}}});}
-  async function audit(root){const rows=await svc().listAudit({limit:200});root.innerHTML=`<div class="control-local-head"><div><h2>Audit Log</h2><span>Append-only privileged actions.</span></div><input id="audit-search" class="control-search" placeholder="Cari action..."></div><div class="admin-table" id="audit-table">${rows.map(a=>`<div class="admin-row"><div><strong>${esc(a.action)}</strong><small>${esc(a.entity_type)} · ${esc(a.entity_id||'')} · ${esc(a.reason||'')}</small></div><small>${fmt(a.created_at)}</small></div>`).join('')||window.SYKA_EMPTY.render({title:'Audit kosong',text:'Belum ada mutation privileged.'})}</div>`;document.getElementById('audit-search').oninput=e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('#audit-table .admin-row').forEach(r=>r.style.display=r.innerText.toLowerCase().includes(q)?'flex':'none');};}
-  window.SYKA_PAGE_ADMIN={render};
+(function() {
+    const svc = () => window.SYKA_CONTROL_SERVICE;
+    const esc = v => window.SYKA_UTILS.escapeHtml(v);
+    const fmt = v => window.SYKA_UTILS.formatDate(v);
+    const tabs = [
+        ['dashboard', 'Dashboard'],
+        ['users', 'Users'],
+        ['competitions', 'Competitions'],
+        ['questions', 'Questions'],
+        ['twibbon', 'Twibbon'],
+        ['results', 'Results'],
+        ['certificates', 'Certificates'],
+        ['orders', 'Orders'],
+        ['moderation', 'UGC Moderation'],
+        ['plans', 'Plans'],
+        ['settings', 'Settings'],
+        ['audit', 'Audit']
+    ];
+
+    function shell(tab) {
+        return `<div class="control-head"><div><span class="eyebrow">ADMIN CONTROL PLANE</span><h1>Panel Admin</h1><p>Platform-wide management, moderation, audit, settings, dan privileged workflows.</p></div></div><div class="control-tabs">${tabs.map(([k,l])=>`<a href="${window.SYKA_ROUTER.href('/admin')}&tab=${encodeURIComponent(k)}" class="control-tab ${k===tab?'active':''}" data-route-link>${l}</a>`).join('')}</div><div id="control-content"><div class="page-loading"><div class="loading-spinner"></div></div></div>`;
+    }
+    async function render(root) {
+        const auth = window.SYKA_STATE.getState().auth;
+        if (!auth.user) {
+            root.innerHTML = window.SYKA_EMPTY.render({
+                title: 'Masuk diperlukan',
+                text: 'Panel admin hanya untuk administrator.'
+            }) + '<div class="control-center"><button class="btn btn-primary" id="admin-login">Masuk</button></div>';
+            document.getElementById('admin-login').onclick = () => window.SYKA_APP.openAuth('login');
+            return;
+        }
+        if (!auth.roles.includes('admin')) {
+            root.innerHTML = window.SYKA_EMPTY.render({
+                title: 'Akses ditolak',
+                text: 'Akun ini tidak memiliki role admin.'
+            });
+            return;
+        }
+        const tab = window.SYKA_STATE.getState().route.query.tab || 'dashboard';
+        root.innerHTML = shell(tabs.some(x => x[0] === tab) ? tab : 'dashboard');
+        root.querySelectorAll('[data-route-link]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+
+    const u = new URL(a.href);
+    const tab = u.searchParams.get('tab') || 'dashboard';
+
+    const cfg = window.SYKA_CONFIG || {};
+    const appPage = cfg.APP_PAGE || '/p/app.html';
+
+    const target = new URL(window.location.href);
+
+    target.pathname = appPage;
+    target.search = '';
+
+    target.searchParams.set('route', '/admin');
+    target.searchParams.set('tab', tab);
+
+    window.history.pushState(
+      {},
+      '',
+      target.pathname + '?' + target.searchParams.toString()
+    );
+
+    window.SYKA_ROUTER.refresh();
+  });
+});
+        await renderTab(document.getElementById('control-content'), tab);
+    }
+    async function renderTab(root, tab) {
+        try {
+            if (tab === 'dashboard') return dashboard(root);
+            if (tab === 'users') return users(root);
+            if (tab === 'competitions') return competitions(root);
+            if (tab === 'questions') return questions(root);
+            if (tab === 'twibbon') return twibbon(root);
+            if (tab === 'results') return results(root);
+            if (tab === 'certificates') return certificates(root);
+            if (tab === 'orders') return orders(root);
+            if (tab === 'moderation') return moderation(root);
+            if (tab === 'plans') return plans(root);
+            if (tab === 'settings') return settings(root);
+            if (tab === 'audit') return audit(root);
+        } catch (e) {
+            root.innerHTML = window.SYKA_EMPTY.render({
+                title: 'Modul gagal dimuat',
+                text: e.message || 'Periksa migration/RLS.'
+            });
+        }
+    }
+
+    function kpis(items) {
+        return `<div class="admin-kpi-grid">${items.map(x=>`<div class="syka-card admin-kpi"><strong>${esc(x.v)}</strong><span>${esc(x.l)}</span></div>`).join('')}</div>`;
+    }
+    async function dashboard(root) {
+        const [stats, comps, regs, users, audit] = await Promise.all([window.SYKA_ADMIN_SERVICE.platformStats(), svc().listCompetitionsAdmin({
+            limit: 300
+        }), svc().listRegistrations({}), svc().listUsers({
+            limit: 300
+        }), svc().listAudit({
+            limit: 12
+        })]);
+        root.innerHTML = kpis([{
+            v: Number(stats.total_students || 0).toLocaleString('id-ID'),
+            l: 'Siswa'
+        }, {
+            v: Number(stats.total_schools || 0).toLocaleString('id-ID'),
+            l: 'Sekolah'
+        }, {
+            v: Number(stats.total_award_recipients || 0).toLocaleString('id-ID'),
+            l: 'Penerima prestasi'
+        }, {
+            v: Number(stats.total_champions || 0).toLocaleString('id-ID'),
+            l: 'Juara'
+        }]) + `<div class="control-grid-2"><section class="syka-card admin-section"><div class="admin-section-head"><div><span class="eyebrow">OVERVIEW</span><h2>Status platform</h2></div></div><div class="mini-stat-grid"><div><b>${users.length}</b><span>Users loaded</span></div><div><b>${comps.length}</b><span>Competitions</span></div><div><b>${regs.length}</b><span>Registrations</span></div><div><b>${audit.length}</b><span>Audit events</span></div></div></section><section class="syka-card admin-section"><div class="admin-section-head"><div><span class="eyebrow">AUDIT</span><h2>Aktivitas terakhir</h2></div></div>${audit.length?audit.map(a=>`<div class="admin-row"><div><strong>${esc(a.action)}</strong><small>${esc(a.entity_type)} ${esc(a.entity_id||'')}</small></div><small>${fmt(a.created_at)}</small></div>`).join(''):window.SYKA_EMPTY.render({title:'Belum ada audit',text:'Aktivitas privileged akan muncul di sini.'})}</section></div>`;
+    }
+    async function users(root) {
+        const rows = await svc().listUsers({
+            limit: 200
+        });
+        root.innerHTML = `<div class="control-local-head"><div><h2>Users</h2><span>${rows.length} pengguna</span></div><input id="admin-user-search" placeholder="Cari nama, username, sekolah..." class="control-search"></div><div class="admin-table" id="admin-users">${rows.map(u=>`<div class="admin-row"><div class="row-main"><div class="avatar-mini">${u.avatar_url?`<img src="${esc(u.avatar_url)}" alt="">`:esc(window.SYKA_UTILS.initials(u.full_name))}</div><div><strong>${esc(u.full_name||u.username||'Tanpa nama')}</strong><small>@${esc(u.username||'—')} · ${esc(u.institution||'—')} · ${esc(u.grade||'—')}</small><div class="chip-row">${u.roles.map(r=>`<span class="chip">${esc(r.role)}${r.is_active?'':' (off)'}</span>`).join('')}<span class="chip ${u.status!=='ACTIVE'?'chip-warn':''}">${esc(u.status)}</span></div></div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-user-status="${u.id}" data-status="${u.status==='ACTIVE'?'SUSPENDED':'ACTIVE'}">${u.status==='ACTIVE'?'Suspend':'Aktifkan'}</button><button class="btn btn-primary btn-sm" data-user-role="${u.id}">Role</button></div></div>`).join('')}</div>`;
+        bindUserSearch(rows);
+        root.querySelectorAll('[data-user-status]').forEach(b => b.onclick = async () => {
+            try {
+                await svc().setUserStatus(b.dataset.userStatus, b.dataset.status, 'Admin control plane');
+                window.SYKA_TOAST.show('Status pengguna diperbarui.', 'success');
+                renderTab(root, 'users');
+            } catch (e) {
+                window.SYKA_TOAST.show(e.message, 'error');
+            }
+        });
+        root.querySelectorAll('[data-user-role]').forEach(b => b.onclick = () => roleModal(b.dataset.userRole));
+    }
+
+    function bindUserSearch(rows) {
+        const i = document.getElementById('admin-user-search');
+        i.oninput = () => {
+            const q = i.value.toLowerCase();
+            document.querySelectorAll('#admin-users .admin-row').forEach(r => r.style.display = r.innerText.toLowerCase().includes(q) ? 'flex' : 'none');
+        };
+    }
+
+    function roleModal(userId) {
+        window.SYKA_MODAL.open({
+            title: 'Atur role pengguna',
+            html: `<form id="role-form" class="form-card"><label>Role<select id="role"><option value="student">Pelajar</option><option value="teacher">Guru</option><option value="organizer_member">Organizer</option><option value="admin">Admin</option></select></label><label class="checkline"><input id="active" type="checkbox" checked> Aktif</label><label>Alasan<textarea id="reason" placeholder="Alasan perubahan role"></textarea></label><button class="btn btn-primary">Simpan</button><div id="role-feedback"></div></form>`,
+            onOpen: body => body.querySelector('#role-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().setUserRole(userId, body.querySelector('#role').value, body.querySelector('#active').checked, body.querySelector('#reason').value);
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Role diperbarui.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#role-feedback').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
+                }
+            }
+        });
+    }
+    async function competitions(root) {
+        const rows = await svc().listCompetitionsAdmin({
+            limit: 200
+        });
+        root.innerHTML = `<div class="control-local-head"><div><h2>Competitions</h2><span>CRUD, state transition, level/reward tersedia.</span></div><button class="btn btn-primary" id="admin-comp-new">+ Kompetisi</button></div><div class="admin-table">${rows.length?rows.map(c=>`<div class="admin-row"><div><strong>${esc(c.title)}</strong><small>${esc(c.category)} · ${esc(c.slug)} · ${esc(c.visibility)}</small><div class="chip-row"><span class="chip">${esc(c.status)}</span>${c.registration_ends_at?`<span class="chip">Pendaftaran sampai ${fmt(c.registration_ends_at)}</span>`:''}</div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-comp-edit="${c.id}">Edit</button><button class="btn btn-ghost btn-sm" data-comp-config="${c.id}">Config</button><button class="btn btn-primary btn-sm" data-comp-next="${c.id}">Transisi</button></div></div>`).join(''):window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi pertama.'})}</div>`;
+        root.querySelector('#admin-comp-new').onclick = () => competitionModal(null);
+        root.querySelectorAll('[data-comp-edit]').forEach(b => b.onclick = () => competitionModal(rows.find(x => x.id === b.dataset.compEdit)));
+        root.querySelectorAll('[data-comp-next]').forEach(b => b.onclick = () => transitionModal(rows.find(x => x.id === b.dataset.compNext)));
+        root.querySelectorAll('[data-comp-config]').forEach(b => b.onclick = () => competitionConfigModal(rows.find(x => x.id === b.dataset.compConfig)));
+    }
+
+    function competitionModal(current) {
+        const p = current || {};
+        window.SYKA_MODAL.open({
+            title: current ? 'Edit kompetisi' : 'Tambah kompetisi',
+            wide: true,
+            html: `<form id="comp-form" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><label>Deskripsi singkat<textarea id="short">${esc(p.short_description||'')}</textarea></label><label>Kategori<input id="category" value="${esc(p.category||'Kompetisi')}"></label><div class="form-grid-2"><label>Registration start<input id="rs" type="datetime-local"></label><label>Registration end<input id="re" type="datetime-local"></label></div><div class="form-grid-2"><label>Start<input id="s" type="datetime-local"></label><label>End<input id="e" type="datetime-local"></label></div><label>Announcement<input id="a" type="datetime-local"></label><div class="form-actions"><button class="btn btn-ghost" type="button" data-close>Batal</button><button class="btn btn-primary">Simpan</button></div><div id="feedback"></div></form>`,
+            onOpen: body => {
+                const form = body.querySelector('#comp-form');
+                const set = (id, v) => {
+                    if (v) body.querySelector(id).value = new Date(v).toISOString().slice(0, 16);
+                };
+                set('#rs', p.registration_starts_at);
+                set('#re', p.registration_ends_at);
+                set('#s', p.starts_at);
+                set('#e', p.ends_at);
+                set('#a', p.announcement_at);
+                form.onsubmit = async e => {
+                    e.preventDefault();
+                    const rs = x => x ? new Date(x).toISOString() : null;
+                    try {
+                        const title = form.querySelector('#title').value.trim();
+                        const slug = form.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+                        await svc().saveCompetition({
+                            title,
+                            slug,
+                            short_description: form.querySelector('#short').value.trim(),
+                            category: form.querySelector('#category').value.trim() || 'Kompetisi',
+                            registration_starts_at: rs(form.querySelector('#rs').value),
+                            registration_ends_at: rs(form.querySelector('#re').value),
+                            starts_at: rs(form.querySelector('#s').value),
+                            ends_at: rs(form.querySelector('#e').value),
+                            announcement_at: rs(form.querySelector('#a').value),
+                            visibility: 'PUBLIC'
+                        }, current?.id || null);
+                        window.SYKA_MODAL.close();
+                        window.SYKA_TOAST.show('Kompetisi tersimpan.', 'success');
+                        window.SYKA_ROUTER.refresh();
+                    } catch (err) {
+                        form.querySelector('#feedback').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
+                    }
+                };
+            }
+        });
+    }
+    async function competitionConfigModal(c) {
+        try {
+            const [levels, rules, rewards] = await Promise.all([svc().listLevels(c.id), svc().getRegistrationRules(c.id), svc().listRewards(c.id)]);
+            window.SYKA_MODAL.open({
+                title: 'Competition configuration',
+                wide: true,
+                html: `<div class="form-card"><div class="control-grid-2"><section><h3>Eligibility / Rules</h3><label>Allowed grades (comma separated)<textarea id="rules-grades">${esc((rules?.allowed_grades||[]).join(', '))}</textarea></label><div class="form-grid-2"><label>Max participants<input id="rules-max" type="number" value="${rules?.max_participants??''}"></label><label>Express cost<input id="rules-cost" type="number" value="${rules?.express_cost??0}"></label></div><label class="checkline"><input id="rules-tw" type="checkbox" ${rules?.require_twibbon?'checked':''}> Require twibbon</label><label class="checkline"><input id="rules-social" type="checkbox" ${rules?.require_social_proof?'checked':''}> Require social proof</label><label class="checkline"><input id="rules-express" type="checkbox" ${rules?.express_enabled?'checked':''}> Express registration</label><button class="btn btn-primary btn-sm" id="save-rules">Simpan rules</button></section><section><h3>Level</h3><div class="admin-table">${levels.map(l=>`<div class="admin-row"><div><strong>${esc(l.label)}</strong><small>${esc(l.code)} · ${esc((l.allowed_grades||[]).join(', '))} · ${l.points} pts</small></div></div>`).join('')||'<p class="muted">Belum ada level.</p>'}</div><button class="btn btn-ghost btn-sm" id="new-level">+ Level</button><h3 style="margin-top:16px">Reward</h3><div class="admin-table">${rewards.map(r=>`<div class="admin-row"><div><strong>${esc(r.rank_code)}</strong><small>${esc(r.title||'')} · ${r.points} pts · ${esc(r.emblem_name||'')}</small></div></div>`).join('')||'<p class="muted">Belum ada reward.</p>'}</div><button class="btn btn-ghost btn-sm" id="new-reward">+ Reward</button></section></div><div id="cfg-feedback"></div></div>`,
+                onOpen: body => {
+                    body.querySelector('#save-rules').onclick = async () => {
+                        try {
+                            await svc().saveRegistrationRules({
+                                allowed_grades: body.querySelector('#rules-grades').value.split(',').map(x => x.trim()).filter(Boolean),
+                                max_participants: body.querySelector('#rules-max').value ? Number(body.querySelector('#rules-max').value) : null,
+                                express_cost: Number(body.querySelector('#rules-cost').value || 0),
+                                require_twibbon: body.querySelector('#rules-tw').checked,
+                                require_social_proof: body.querySelector('#rules-social').checked,
+                                express_enabled: body.querySelector('#rules-express').checked
+                            }, c.id);
+                            window.SYKA_TOAST.show('Rules tersimpan.', 'success');
+                        } catch (e) {
+                            body.querySelector('#cfg-feedback').innerHTML = `<div class="inline-error">${esc(e.message)}</div>`;
+                        }
+                    };
+                    body.querySelector('#new-level').onclick = () => smallLevelModal(c.id);
+                    body.querySelector('#new-reward').onclick = () => smallRewardModal(c.id);
+                }
+            });
+        } catch (e) {
+            window.SYKA_TOAST.show(e.message, 'error');
+        }
+    }
+
+    function smallLevelModal(cid) {
+        window.SYKA_MODAL.open({
+            title: 'Tambah level',
+            html: `<form id="lvf" class="form-card"><label>Code<input id="code" required></label><label>Label<input id="label" required></label><label>Allowed grades<input id="grades" placeholder="6 SD,7 SMP"></label><label>Points<input id="points" type="number" value="0"></label><button class="btn btn-primary">Simpan</button></form>`,
+            onOpen: body => body.querySelector('#lvf').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().saveLevel({
+                        competition_id: cid,
+                        code: body.querySelector('#code').value.trim(),
+                        label: body.querySelector('#label').value.trim(),
+                        allowed_grades: body.querySelector('#grades').value.split(',').map(x => x.trim()).filter(Boolean),
+                        points: Number(body.querySelector('#points').value || 0)
+                    });
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Level dibuat.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#lvf').insertAdjacentHTML('beforeend', `<div class="inline-error">${esc(err.message)}</div>`);
+                }
+            }
+        });
+    }
+
+    function smallRewardModal(cid) {
+        window.SYKA_MODAL.open({
+            title: 'Tambah reward',
+            html: `<form id="rwf" class="form-card"><label>Rank code<input id="rank" placeholder="1ST" required></label><label>Title<input id="title"></label><label>Points<input id="points" type="number" value="0"></label><label>Emblem<input id="emblem"></label><label class="checkline"><input id="cert" type="checkbox" checked> Certificate</label><button class="btn btn-primary">Simpan</button></form>`,
+            onOpen: body => body.querySelector('#rwf').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().saveReward({
+                        competition_id: cid,
+                        rank_code: body.querySelector('#rank').value.trim(),
+                        title: body.querySelector('#title').value.trim() || null,
+                        points: Number(body.querySelector('#points').value || 0),
+                        emblem_name: body.querySelector('#emblem').value.trim() || null,
+                        certificate_enabled: body.querySelector('#cert').checked
+                    });
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Reward dibuat.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#rwf').insertAdjacentHTML('beforeend', `<div class="inline-error">${esc(err.message)}</div>`);
+                }
+            }
+        });
+    }
+
+    function transitionModal(c) {
+        const order = ['PUBLISHED', 'REGISTRATION_OPEN', 'REGISTRATION_CLOSED', 'LIVE', 'SUBMISSION_CLOSED', 'GRADING', 'RESULT_PUBLISHED', 'ARCHIVED', 'SUSPENDED', 'CANCELLED'];
+        window.SYKA_MODAL.open({
+            title: 'Ubah status kompetisi',
+            html: `<form id="tr-form" class="form-card"><p>Status saat ini: <b>${esc(c.status)}</b></p><label>Status tujuan<select id="to">${order.map(s=>`<option>${s}</option>`).join('')}</select></label><label>Alasan<textarea id="reason"></textarea></label><button class="btn btn-primary">Simpan transisi</button><div id="fb"></div></form>`,
+            onOpen: body => body.querySelector('#tr-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().transitionCompetition(c.id, body.querySelector('#to').value, body.querySelector('#reason').value);
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Status kompetisi berubah.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
+                }
+            }
+        });
+    }
+    async function questions(root) {
+        const [banks, qs] = await Promise.all([svc().listQuestionBanks(), svc().listQuestions({})]);
+        root.innerHTML = `<div class="control-local-head"><div><h2>Questions Builder</h2><span>Bank soal, builder, moderation, dan answer key.</span></div><div class="row-actions"><button class="btn btn-ghost btn-sm" id="new-bank">+ Bank</button><button class="btn btn-primary btn-sm" id="new-q">+ Soal</button></div></div><div class="control-grid-2"><section><h3>Question Banks</h3><div class="admin-table">${banks.map(b=>`<div class="admin-row"><div><strong>${esc(b.name)}</strong><small>${esc(b.status)} · ${esc(b.description||'')}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada bank soal',text:'Buat bank soal pertama.'})}</div></section><section><h3>Questions</h3><div class="admin-table">${qs.map(q=>`<div class="admin-row"><div><strong>${esc(q.prompt)}</strong><small>${esc(q.type)} · ${q.points} poin · ${esc(q.status)}</small></div><button class="btn btn-ghost btn-sm" data-q-edit="${q.id}">Edit</button></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada soal',text:'Tambahkan soal.'})}</div></section></div>`;
+        root.querySelector('#new-bank').onclick = () => bankModal();
+        root.querySelector('#new-q').onclick = () => questionModal();
+        root.querySelectorAll('[data-q-edit]').forEach(b => b.onclick = () => questionModal(qs.find(x => x.id === b.dataset.qEdit)));
+    }
+
+    function bankModal() {
+        window.SYKA_MODAL.open({
+            title: 'Question Bank',
+            html: `<form id="bank-form" class="form-card"><label>Nama *<input id="name" required></label><label>Deskripsi<textarea id="desc"></textarea></label><label>Status<select id="status"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option></select></label><button class="btn btn-primary">Simpan</button><div id="fb"></div></form>`,
+            onOpen: body => body.querySelector('#bank-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    const a = window.SYKA_STATE.getState().auth;
+                    const memberships = await window.SYKA_ADMIN_SERVICE.listMyOrganizerMemberships(a.user.id);
+                    const organizerId = memberships[0]?.organizer_id || null;
+                    await svc().saveQuestionBank({
+                        name: body.querySelector('#name').value.trim(),
+                        description: body.querySelector('#desc').value.trim(),
+                        status: body.querySelector('#status').value,
+                        organizer_id: organizerId,
+                        owner_user_id: a.user.id
+                    });
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Bank soal tersimpan.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
+                }
+            }
+        });
+    }
+
+    function questionModal(current) {
+        const p = current || {};
+        window.SYKA_MODAL.open({
+            title: current ? 'Edit soal' : 'Tambah soal',
+            wide: true,
+            html: `<form id="q-form" class="form-card"><label>Pertanyaan *<textarea id="prompt" required>${esc(p.prompt||'')}</textarea></label><div class="form-grid-2"><label>Type<select id="type"><option value="multiple_choice">Multiple choice</option><option value="checkbox">Checkbox</option><option value="essay">Essay</option><option value="file">File</option></select></label><label>Poin<input id="points" type="number" step="0.5" value="${p.points||1}"></label></div><label>Competition ID (opsional)<input id="cid" value="${esc(p.competition_id||'')}"></label><label>Status<select id="status"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option></select></label><div class="form-actions"><button class="btn btn-primary">Simpan</button></div><div id="fb"></div></form>`,
+            onOpen: body => body.querySelector('#q-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().saveQuestion({
+                        prompt: body.querySelector('#prompt').value.trim(),
+                        type: body.querySelector('#type').value,
+                        points: Number(body.querySelector('#points').value || 1),
+                        required: true,
+                        competition_id: body.querySelector('#cid').value.trim() || null,
+                        status: body.querySelector('#status').value,
+                        config: {}
+                    }, current?.id || null);
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Soal tersimpan.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
+                }
+            }
+        });
+    }
+    async function twibbon(root) {
+        const rows = await svc().listTwibbonTemplates({});
+        root.innerHTML = `<div class="control-local-head"><div><h2>Twibbon Templates</h2><span>Template dan konfigurasi submission.</span></div><button class="btn btn-primary" id="new-tw">+ Template</button></div><div class="admin-table">${rows.map(t=>`<div class="admin-row"><div><strong>${esc(t.name)}</strong><small>${esc(t.competition_id||'Global')} · ${t.is_required?'Wajib':'Opsional'} · ${t.is_active?'Aktif':'Nonaktif'}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada template',text:'Tambahkan template twibbon.'})}</div>`;
+        root.querySelector('#new-tw').onclick = () => twibbonModal();
+    }
+
+    function twibbonModal() {
+        window.SYKA_MODAL.open({
+            title: 'Twibbon template',
+            html: `<form id="tw-form" class="form-card"><label>Nama *<input id="name" required></label><label>Competition ID<input id="cid"></label><label>Image URL<input id="url"></label><label>Public ID<input id="pid"></label><label class="checkline"><input id="req" type="checkbox"> Wajib</label><button class="btn btn-primary">Simpan</button><div id="fb"></div></form>`,
+            onOpen: body => body.querySelector('#tw-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().saveTwibbonTemplate({
+                        name: body.querySelector('#name').value.trim(),
+                        competition_id: body.querySelector('#cid').value.trim() || null,
+                        image_url: body.querySelector('#url').value.trim() || null,
+                        public_id: body.querySelector('#pid').value.trim() || null,
+                        is_required: body.querySelector('#req').checked
+                    });
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Template tersimpan.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
+                }
+            }
+        });
+    }
+    async function results(root) {
+        const rows = await svc().listAttempts({});
+        root.innerHTML = `<div class="control-local-head"><div><h2>Results</h2><span>Grade moderation dan finalisasi.</span></div></div><div class="admin-table">${rows.map(a=>`<div class="admin-row"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · ${esc(a.status)} · score ${a.score}</small></div><button class="btn btn-primary btn-sm" data-final="${a.id}" ${a.status==='FINALIZED'?'disabled':''}>Finalize</button></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada attempt',text:'Attempt peserta akan muncul saat lomba berjalan.'})}</div>`;
+        root.querySelectorAll('[data-final]').forEach(b => b.onclick = () => finalizeModal(b.dataset.final));
+    }
+
+    function finalizeModal(id) {
+        window.SYKA_MODAL.open({
+            title: 'Finalisasi hasil',
+            html: `<form id="fin-form" class="form-card"><label>Score final<input id="score" type="number" step="0.01"></label><label>Alasan<textarea id="reason"></textarea></label><button class="btn btn-primary">Finalisasi</button></form>`,
+            onOpen: body => body.querySelector('#fin-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().finalizeAttempt(id, Number(body.querySelector('#score').value));
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Attempt difinalisasi.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#fin-form').insertAdjacentHTML('beforeend', `<div class="inline-error">${esc(err.message)}</div>`);
+                }
+            }
+        });
+    }
+    async function certificates(root) {
+        const rows = await svc().listCertificates({});
+        root.innerHTML = `<div class="control-local-head"><div><h2>Certificates</h2><span>Generate, review, issue, revoke.</span></div></div><div class="admin-table">${rows.map(x=>`<div class="admin-row"><div><strong>${esc(x.profiles?.full_name||x.user_id)}</strong><small>${esc(x.competitions?.title||'')} · ${esc(x.status)} · rev ${x.current_revision}</small></div><div class="row-actions">${['GENERATED','REVIEW','APPROVED','PUBLISHED','REVOKED'].map(s=>`<button class="btn btn-ghost btn-sm" data-cert="${x.id}" data-status="${s}">${s}</button>`).join('')}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada certificate',text:'Certificate event akan muncul setelah result.'})}</div>`;
+        root.querySelectorAll('[data-cert]').forEach(b => b.onclick = async () => {
+            try {
+                await svc().updateCertificate(b.dataset.cert, b.dataset.status);
+                window.SYKA_TOAST.show('Status certificate diperbarui.', 'success');
+                window.SYKA_ROUTER.refresh();
+            } catch (e) {
+                window.SYKA_TOAST.show(e.message, 'error');
+            }
+        });
+    }
+    async function orders(root) {
+        const rows = await svc().listOrders({});
+        root.innerHTML = `<div class="control-local-head"><div><h2>Orders</h2><span>Payment, fulfillment, tracking.</span></div></div><div class="admin-table">${rows.map(o=>`<div class="admin-row"><div><strong>${esc(o.profiles?.full_name||o.user_id)}</strong><small>${esc(o.id)} · ${esc(o.status)} · Rp ${Number(o.total||0).toLocaleString('id-ID')}</small></div><select class="compact-select" data-order="${o.id}">${['DRAFT','PENDING_PAYMENT','PAID','PROCESSING','SHIPPED','COMPLETED','REFUNDED','CANCELLED'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada order',text:'Order peserta akan muncul di sini.'})}</div>`;
+        root.querySelectorAll('[data-order]').forEach(s => s.onchange = async () => {
+            try {
+                await svc().updateOrder(s.dataset.order, s.value);
+                window.SYKA_TOAST.show('Order diperbarui.', 'success');
+            } catch (e) {
+                window.SYKA_TOAST.show(e.message, 'error');
+            }
+        });
+    }
+    async function moderation(root) {
+        const m = await svc().listModeration();
+        root.innerHTML = `<div class="control-grid-2"><section><h2>Questions UGC</h2><div id="ugc-questions" class="admin-table"><p class="muted">Memuat…</p></div></section><section><h2>Posts</h2><div class="admin-table">${m.posts.map(p=>`<div class="admin-row"><div><strong>${esc(p.title)}</strong><small>${esc(p.status)} · ${fmt(p.created_at)}</small></div><select class="compact-select" data-post="${p.id}"><option>PUBLISHED</option><option>HIDDEN</option><option>ARCHIVED</option></select></div>`).join('')||window.SYKA_EMPTY.render({title:'Tidak ada post',text:'Moderasi post akan muncul.'})}</div></section><section><h2>Comments</h2><div class="admin-table">${m.comments.map(p=>`<div class="admin-row"><div><strong>${esc(p.body).slice(0,100)}</strong><small>${esc(p.moderation_state)} · ${fmt(p.created_at)}</small></div><select class="compact-select" data-comment="${p.id}"><option>PUBLISHED</option><option>HIDDEN</option><option>QUARANTINED</option></select></div>`).join('')||window.SYKA_EMPTY.render({title:'Tidak ada comment',text:'Moderasi komentar akan muncul.'})}</div></section></div>`;
+        (async () => {
+            try {
+                const qs = await svc().listQuestions({});
+                const box = document.getElementById('ugc-questions');
+                box.innerHTML = qs.map(q => `<div class="admin-row"><div><strong>${esc(q.prompt)}</strong><small>${esc(q.status)} · ${esc(q.type)}</small></div><select class="compact-select" data-ugc="${q.id}"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option><option>QUARANTINED</option><option>ARCHIVED</option></select></div>`).join('') || '<p class="muted">Tidak ada question UGC.</p>';
+                box.querySelectorAll('[data-ugc]').forEach(s => s.onchange = async () => {
+                    try {
+                        await svc().moderateQuestion(s.dataset.ugc, s.value);
+                        window.SYKA_TOAST.show('Question dimoderasi.', 'success');
+                    } catch (e) {
+                        window.SYKA_TOAST.show(e.message, 'error');
+                    }
+                });
+            } catch (e) {
+                document.getElementById('ugc-questions').innerHTML = '<p class="muted">Tidak dapat memuat UGC question.</p>';
+            }
+        })();
+        root.querySelectorAll('[data-post]').forEach(s => s.onchange = async () => {
+            try {
+                await svc().moderatePost(s.dataset.post, s.value);
+                window.SYKA_TOAST.show('Post dimoderasi.', 'success');
+            } catch (e) {
+                window.SYKA_TOAST.show(e.message, 'error');
+            }
+        });
+        root.querySelectorAll('[data-comment]').forEach(s => s.onchange = async () => {
+            try {
+                await svc().moderateComment(s.dataset.comment, s.value);
+                window.SYKA_TOAST.show('Comment dimoderasi.', 'success');
+            } catch (e) {
+                window.SYKA_TOAST.show(e.message, 'error');
+            }
+        });
+    }
+    async function plans(root) {
+        const [plans, ents] = await Promise.all([svc().listPlans(), svc().listEntitlements()]);
+        root.innerHTML = `<div class="control-grid-2"><section><h2>Organizer Plans</h2><div class="admin-table">${plans.map(p=>`<div class="admin-row"><div><strong>${esc(p.plan_code)}</strong><small>${esc(p.organizer_id)} · ${fmt(p.starts_at)}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada plan',text:'Plan organizer akan muncul setelah ditetapkan.'})}</div></section><section><div class="control-local-head"><h2>Entitlements</h2><button class="btn btn-primary btn-sm" id="new-ent">+ Entitlement</button></div><div class="admin-table">${ents.map(e=>`<div class="admin-row"><div><strong>${esc(e.plan_code)} · ${esc(e.capability)}</strong><small>Limit: ${e.limit_value??'—'}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada entitlement',text:'Tambahkan capability per plan.'})}</div></section></div>`;
+        root.querySelector('#new-ent').onclick = () => entitlementModal();
+    }
+
+    function entitlementModal() {
+        window.SYKA_MODAL.open({
+            title: 'Plan entitlement',
+            html: `<form id="ent-form" class="form-card"><label>Plan<select id="plan"><option>FREE</option><option>PRO</option><option>PREMIUM</option></select></label><label>Capability<input id="cap" required placeholder="competition_publish"></label><label>Limit<input id="limit" type="number"></label><label>Config JSON<textarea id="config">{}</textarea></label><button class="btn btn-primary">Simpan</button></form>`,
+            onOpen: body => body.querySelector('#ent-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().saveEntitlement({
+                        plan_code: body.querySelector('#plan').value,
+                        capability: body.querySelector('#cap').value.trim(),
+                        limit_value: body.querySelector('#limit').value ? Number(body.querySelector('#limit').value) : null,
+                        config: JSON.parse(body.querySelector('#config').value || '{}')
+                    });
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Entitlement tersimpan.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#ent-form').insertAdjacentHTML('beforeend', `<div class="inline-error">${esc(err.message)}</div>`);
+                }
+            }
+        });
+    }
+    async function settings(root) {
+        const [flags, settings] = await Promise.all([svc().listFlags(), svc().listSettings()]);
+        root.innerHTML = `<div class="control-grid-2"><section><h2>Feature Flags</h2><div class="admin-table">${flags.map(f=>`<div class="admin-row"><div><strong>${esc(f.key)}</strong><small>${f.enabled?'Enabled':'Disabled'}</small></div><button class="btn btn-ghost btn-sm" data-flag="${esc(f.key)}" data-enabled="${!f.enabled}">${f.enabled?'Matikan':'Nyalakan'}</button></div>`).join('')}</div></section><section><h2>Global Settings</h2><div class="admin-table">${settings.map(s=>`<div class="admin-row"><div><strong>${esc(s.key)}</strong><small>${esc(JSON.stringify(s.value))}</small></div><button class="btn btn-ghost btn-sm" data-setting="${esc(s.key)}">Edit</button></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada settings',text:'Global setting dapat disimpan dari sini.'})}</div></section></div>`;
+        root.querySelectorAll('[data-flag]').forEach(b => b.onclick = async () => {
+            try {
+                await svc().setFlag(b.dataset.flag, b.dataset.enabled === 'true', {});
+                window.SYKA_TOAST.show('Feature flag diperbarui.', 'success');
+                window.SYKA_ROUTER.refresh();
+            } catch (e) {
+                window.SYKA_TOAST.show(e.message, 'error');
+            }
+        });
+        root.querySelectorAll('[data-setting]').forEach(b => b.onclick = () => settingModal(b.dataset.setting));
+    }
+
+    function settingModal(key) {
+        window.SYKA_MODAL.open({
+            title: 'Global setting',
+            html: `<form id="set-form" class="form-card"><label>Key<input id="key" value="${esc(key||'')}" required></label><label>Value JSON<textarea id="value">{}</textarea></label><button class="btn btn-primary">Simpan</button></form>`,
+            onOpen: body => body.querySelector('#set-form').onsubmit = async e => {
+                e.preventDefault();
+                try {
+                    await svc().setSetting(body.querySelector('#key').value.trim(), JSON.parse(body.querySelector('#value').value || '{}'));
+                    window.SYKA_MODAL.close();
+                    window.SYKA_TOAST.show('Setting tersimpan.', 'success');
+                    window.SYKA_ROUTER.refresh();
+                } catch (err) {
+                    body.querySelector('#set-form').insertAdjacentHTML('beforeend', `<div class="inline-error">${esc(err.message)}</div>`);
+                }
+            }
+        });
+    }
+    async function audit(root) {
+        const rows = await svc().listAudit({
+            limit: 200
+        });
+        root.innerHTML = `<div class="control-local-head"><div><h2>Audit Log</h2><span>Append-only privileged actions.</span></div><input id="audit-search" class="control-search" placeholder="Cari action..."></div><div class="admin-table" id="audit-table">${rows.map(a=>`<div class="admin-row"><div><strong>${esc(a.action)}</strong><small>${esc(a.entity_type)} · ${esc(a.entity_id||'')} · ${esc(a.reason||'')}</small></div><small>${fmt(a.created_at)}</small></div>`).join('')||window.SYKA_EMPTY.render({title:'Audit kosong',text:'Belum ada mutation privileged.'})}</div>`;
+        document.getElementById('audit-search').oninput = e => {
+            const q = e.target.value.toLowerCase();
+            document.querySelectorAll('#audit-table .admin-row').forEach(r => r.style.display = r.innerText.toLowerCase().includes(q) ? 'flex' : 'none');
+        };
+    }
+    window.SYKA_PAGE_ADMIN = {
+        render
+    };
 })();
