@@ -994,9 +994,48 @@ window.SYKA_PAGE_VERIFY={render};})();
     });
   }
   function init(){
-    if(window.__SYKA_APP_INITIALIZED) return;
-    window.__SYKA_APP_INITIALIZED=true;
-    bindInternalNavigation();
-    const theme=window.SYKA_UTILS.getStoredTheme();setTheme(theme);if(localStorage.getItem('syka_sidebar')==='0')document.body.classList.add('sidebar-collapsed');window.SYKA_SIDEBAR.render();window.SYKA_HEADER.render();window.SYKA_BOTTOMNAV.render();window.__SYKA_AUTH_UI_UNSUB=window.SYKA_STATE.subscribe((state,path)=>{if(path && path.startsWith('auth.')) refreshAuthChrome();});document.getElementById('mobile-nav-overlay')?.addEventListener('click',toggleMobileNav);window.addEventListener('online',()=>window.SYKA_STATE.patch('network.online',true));window.addEventListener('offline',()=>{window.SYKA_STATE.patch('network.online',false);window.SYKA_TOAST.show('Koneksi internet terputus.','warning');});window.SYKA_ROUTER.render();bootstrapAuth();}
+  if(window.__SYKA_APP_INITIALIZED) return;
+  window.__SYKA_APP_INITIALIZED=true;
+
+  bindInternalNavigation();
+
+  const theme=window.SYKA_UTILS.getStoredTheme();
+  setTheme(theme);
+
+  if(localStorage.getItem('syka_sidebar')==='0'){
+    document.body.classList.add('sidebar-collapsed');
+  }
+
+  window.SYKA_SIDEBAR.render();
+  window.SYKA_HEADER.render();
+  window.SYKA_BOTTOMNAV.render();
+
+  window.__SYKA_AUTH_UI_UNSUB=window.SYKA_STATE.subscribe((state,path)=>{
+    if(path && path.startsWith('auth.')) refreshAuthChrome();
+  });
+
+  document.getElementById('mobile-nav-overlay')?.addEventListener('click',toggleMobileNav);
+
+  window.addEventListener('online',()=>{
+    window.SYKA_STATE.patch('network.online',true);
+  });
+
+  window.addEventListener('offline',()=>{
+    window.SYKA_STATE.patch('network.online',false);
+    window.SYKA_TOAST.show('Koneksi internet terputus.','warning');
+  });
+
+  // IMPORTANT:
+  // Do NOT render a protected route before the Supabase session has been restored.
+  // bootstrapAuth() restores the persisted session, profile and roles first.
+  // Only then do we resolve/render the current application route.
+  bootstrapAuth()
+    .catch((error)=>{
+      console.error('[Sykabelajar] Auth bootstrap failed:', error);
+    })
+    .finally(()=>{
+      window.SYKA_ROUTER.render();
+    });
+}
   window.SYKA_APP={init,openAuth,openForgotPassword,logout,toggleTheme,toggleSidebar,toggleMobileNav,disposeAuth:()=>authSubscription?.unsubscribe?.()};
 })();
