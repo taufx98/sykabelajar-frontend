@@ -2,10 +2,10 @@
   "schema": 2,
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.41dd827bc047.min.js",
+  "app": "app.9069f9c1890d.min.js",
   "styles": "styles.8184a314b7d3.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "120b0ad5c5616d01d994ac977616d67ae22b8c67",
-  "generatedAt": "2026-08-22T13:07:01+07:00"
+  "commit": "39fdee9920203c3a16049fd56de78787fdf5af9c",
+  "generatedAt": "2026-08-22T13:30:49+07:00"
 }
