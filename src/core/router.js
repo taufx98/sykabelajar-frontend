@@ -13,13 +13,38 @@
     {name:'admin',match:p=>p==='/admin'},
     {name:'verify',match:p=>/^\/verifikasi\/[^/]+$/.test(p)},
   ];
-  function parse(p){ const clean=decodeURIComponent((p||'/').split('?')[0].replace(/\/+$/,'')||'/'); let r=routes.find(x=>x.match(clean)); if(!r) return {name:'not_found',params:{},query:window.SYKA_UTILS.queryParams()}; const seg=clean.split('/').filter(Boolean); const params={}; if(r.name==='competition')params.slug=seg[1]; if(r.name==='registration')params.slug=seg[1]; if(r.name==='attempt')params.attemptId=seg[1]; if(r.name==='verify')params.code=seg[1]; return {name:r.name,params,query:window.SYKA_UTILS.queryParams()}; }
-  function href(path){ const cfg=window.SYKA_CONFIG; if(cfg.ROUTE_MODE==='hash') return '#'+path; if(cfg.ROUTE_MODE==='path') return path; const u=new URL(window.location.href); u.pathname=cfg.APP_PAGE; u.search=''; u.searchParams.set('route',path); u.hash=''; return u.pathname+u.search; }
-  function navigate(path){ const cfg=window.SYKA_CONFIG; if(cfg.ROUTE_MODE==='hash'){window.location.hash='#'+path; return;} if(cfg.ROUTE_MODE==='path'){history.pushState({},'',path); render(); return;} const u=new URL(window.location.href); u.pathname=cfg.APP_PAGE; u.search=''; u.searchParams.set('route',path); u.hash=''; history.pushState({},'',u.pathname+u.search); render(); }
-  async function render(){ const p=window.SYKA_UTILS.routePath(); const parsed=parse(p); window.SYKA_STATE.patch('route',parsed); window.SYKA_SIDEBAR.render(); window.SYKA_HEADER.render(); window.SYKA_BOTTOMNAV.render(); const blogFallback=document.getElementById('blogger-content'); if(blogFallback) blogFallback.style.display = parsed.name==='not_found' ? 'block' : 'none'; const root=document.getElementById('page-root'); root.innerHTML='<div class="page-loading"><div class="loading-spinner"></div></div>'; if(parsed.name==='home')return window.SYKA_PAGE_HOME.render(root); if(parsed.name==='lomba')return window.SYKA_PAGE_LOMBA.render(root); if(parsed.name==='competition')return window.SYKA_PAGE_COMPETITION.render(root,parsed.params.slug); if(parsed.name==='registration')return window.SYKA_PAGE_REGISTRATION.render(root,parsed.params.slug); if(parsed.name==='profile')return window.SYKA_PAGE_PROFILE.render(root); if(parsed.name==='leaderboard')return window.SYKA_PAGE_LEADERBOARD.render(root); if(parsed.name==='awards')return window.SYKA_PAGE_AWARDS.render(root); if(parsed.name==='orders')return window.SYKA_PAGE_ORDERS.render(root); if(parsed.name==='verify')return window.SYKA_PAGE_VERIFY.render(root,parsed.params.code); if(parsed.name==='attempt')return window.SYKA_PAGE_PLACEHOLDER.render(root,'Attempt engine','Timer server-authoritative, autosave debounce, resume, submit idempotency, dan grading akan berada di service contract attempt.'); if(parsed.name==='organizer')return window.SYKA_PAGE_ORGANIZER.render(root); if(parsed.name==='admin')return window.SYKA_PAGE_ADMIN.render(root); return window.SYKA_PAGE_PLACEHOLDER.render(root,'Halaman tidak ditemukan','Route belum tersedia di application shell.'); }
+  function parse(path){
+    const clean=decodeURIComponent((path||'/').split('?')[0].replace(/\/+$/,'')||'/');
+    const found=routes.find(r=>r.match(clean));
+    if(!found)return {name:'not_found',params:{},query:window.SYKA_UTILS.queryParams()};
+    const seg=clean.split('/').filter(Boolean);const params={};
+    if(found.name==='competition'||found.name==='registration')params.slug=seg[1];
+    if(found.name==='attempt')params.attemptId=seg[1];
+    if(found.name==='verify')params.code=seg[1];
+    return {name:found.name,params,query:window.SYKA_UTILS.queryParams()};
+  }
+  function href(path,query={}){const cfg=window.SYKA_CONFIG;const u=new URL(window.location.href);u.pathname=cfg.APP_PAGE;u.search='';u.hash='';u.searchParams.set('route',path);Object.entries(query||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null&&v!=='')u.searchParams.set(k,String(v));});return u.pathname+u.search;}
+  function navigate(path,query={}){history.pushState({},'',href(path,query));return render();}
+  async function render(){
+    const parsed=parse(window.SYKA_UTILS.routePath());window.SYKA_STATE.patch('route',parsed);
+    window.SYKA_SIDEBAR?.render?.();window.SYKA_HEADER?.render?.();window.SYKA_BOTTOMNAV?.render?.();
+    const fallback=document.getElementById('blogger-content');if(fallback)fallback.style.display=parsed.name==='not_found'?'block':'none';
+    const root=document.getElementById('page-root');if(!root)return;root.innerHTML='<div class="page-loading"><div class="loading-spinner"></div><span>Memuat halaman…</span></div>';
+    try{
+      if(parsed.name==='home')return await window.SYKA_PAGE_HOME.render(root);
+      if(parsed.name==='lomba')return await window.SYKA_PAGE_LOMBA.render(root);
+      if(parsed.name==='competition')return await window.SYKA_PAGE_COMPETITION.render(root,parsed.params.slug);
+      if(parsed.name==='registration')return await window.SYKA_PAGE_REGISTRATION.render(root,parsed.params.slug);
+      if(parsed.name==='profile')return await window.SYKA_PAGE_PROFILE.render(root);
+      if(parsed.name==='leaderboard')return await window.SYKA_PAGE_LEADERBOARD.render(root);
+      if(parsed.name==='awards')return await window.SYKA_PAGE_AWARDS.render(root);
+      if(parsed.name==='orders')return await window.SYKA_PAGE_ORDERS.render(root);
+      if(parsed.name==='verify')return await window.SYKA_PAGE_VERIFY.render(root,parsed.params.code);
+      if(parsed.name==='organizer')return await window.SYKA_PAGE_ORGANIZER.render(root);
+      if(parsed.name==='admin')return await window.SYKA_PAGE_ADMIN.render(root);
+      return window.SYKA_PAGE_PLACEHOLDER.render(root,'Halaman tidak ditemukan','Route aplikasi tidak dikenali. Gunakan navigasi Sykabelajar untuk kembali ke halaman yang tersedia.');
+    }catch(error){console.error('[Sykabelajar] route render failed',error);root.innerHTML=window.SYKA_EMPTY.render({title:'Halaman gagal dimuat',text:error.message||'Terjadi kesalahan saat memuat halaman.',actionHtml:'<button class="btn btn-primary" id="route-retry">Coba lagi</button>'});document.getElementById('route-retry')?.addEventListener('click',()=>render());}
+  }
   function refresh(){return render();}
-  window.addEventListener('popstate',render); window.addEventListener('hashchange',render);
-  window.SYKA_ROUTER={parse,href,navigate,render,refresh};
+  window.addEventListener('popstate',render);window.addEventListener('hashchange',render);window.SYKA_ROUTER={parse,href,navigate,render,refresh};
 })();
-
-

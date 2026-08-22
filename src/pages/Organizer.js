@@ -1,428 +1,53 @@
-(function() {
-    const svc = () => window.SYKA_CONTROL_SERVICE;
-    const esc = v => window.SYKA_UTILS.escapeHtml(v);
-    const fmt = v => window.SYKA_UTILS.formatDate(v);
-    const tabs = [
-        ['dashboard', 'Dashboard'],
-        ['competitions', 'Kompetisi'],
-        ['participants', 'Peserta'],
-        ['questions', 'Soal'],
-        ['grading', 'Grading'],
-        ['results', 'Results'],
-        ['awards', 'Awards'],
-        ['certificates', 'Certificate'],
-        ['twibbon', 'Twibbon'],
-        ['notifications', 'Notifikasi'],
-        ['plan', 'Plan & Usage']
-    ];
-    async function membership() {
-        const a = window.SYKA_STATE.getState().auth;
-        return window.SYKA_ADMIN_SERVICE.listMyOrganizerMemberships(a.user.id);
-    }
-
-    function shell(tab, org) {
-        return `<div class="control-head"><div><span class="eyebrow">ORGANIZER CONTROL PLANE</span><h1>${esc(org?.name||'Penyelenggara')}</h1><p>Create competition → approval → grading → result → award/certificate.</p></div><div class="org-plan-chip">${esc(org?.plan_code||'FREE')}</div></div><div class="control-tabs">${tabs.map(([k,l])=>`<a href="${window.SYKA_ROUTER.href('/organizer')}&tab=${k}" class="control-tab ${k===tab?'active':''}" data-org-tab="${k}">${l}</a>`).join('')}</div><div id="control-content"><div class="page-loading"><div class="loading-spinner"></div></div></div>`;
-    }
-    async function render(root) {
-        const a = window.SYKA_STATE.getState().auth;
-        if (!a.user) {
-            root.innerHTML = window.SYKA_EMPTY.render({
-                title: 'Masuk diperlukan',
-                text: 'Panel penyelenggara hanya untuk anggota organizer.'
-            }) + '<div class="control-center"><button class="btn btn-primary" id="org-login">Masuk</button></div>';
-            document.getElementById('org-login').onclick = () => window.SYKA_APP.openAuth('login');
-            return;
-        }
-        if (!a.roles.includes('organizer_member') && !a.roles.includes('admin')) {
-            root.innerHTML = window.SYKA_EMPTY.render({
-                title: 'Akses organizer diperlukan',
-                text: 'Tambahkan role organizer_member dan membership terlebih dahulu.'
-            });
-            return;
-        }
-        const memberships = await membership();
-        const m = memberships[0] || {};
-        const tab = window.SYKA_STATE.getState().route.query.tab || 'dashboard';
-        root.innerHTML = shell(tabs.some(x => x[0] === tab) ? tab : 'dashboard', m.organizers || {});
-        root.querySelectorAll('[data-org-tab]').forEach(x => {
-  x.addEventListener('click', e => {
-    e.preventDefault();
-
-    const u = new URL(x.href);
-    const tab = u.searchParams.get('tab') || 'dashboard';
-
-    const cfg = window.SYKA_CONFIG || {};
-    const appPage = cfg.APP_PAGE || '/p/app.html';
-
-    const target = new URL(window.location.href);
-
-    target.pathname = appPage;
-    target.search = '';
-
-    target.searchParams.set('route', '/organizer');
-    target.searchParams.set('tab', tab);
-
-    window.history.pushState(
-      {},
-      '',
-      target.pathname + '?' + target.searchParams.toString()
-    );
-
-    window.SYKA_ROUTER.refresh();
-  });
-});
-        await renderTab(document.getElementById('control-content'), tab, m.organizer_id || null);
-    }
-    async function renderTab(root, tab, orgId) {
-        try {
-            if (tab === 'dashboard') return dashboard(root, orgId);
-            if (tab === 'competitions') return competitions(root, orgId);
-            if (tab === 'participants') return participants(root, orgId);
-            if (tab === 'questions') return questions(root, orgId);
-            if (tab === 'grading') return grading(root, orgId);
-            if (tab === 'results') return results(root, orgId);
-            if (tab === 'awards') return awards(root, orgId);
-            if (tab === 'certificates') return certificates(root, orgId);
-            if (tab === 'twibbon') return twibbon(root, orgId);
-            if (tab === 'notifications') return notifications(root);
-            if (tab === 'plan') return plan(root, orgId);
-        } catch (e) {
-            root.innerHTML = window.SYKA_EMPTY.render({
-                title: 'Modul organizer gagal',
-                text: e.message || 'Periksa RLS dan membership.'
-            });
-        }
-    }
-    async function dashboard(root, orgId) {
-        const rows = await svc().listCompetitionsAdmin({
-            limit: 200
-        });
-        const mine = rows.filter(x => x.organizer_id === orgId);
-        const regs = await Promise.all(mine.slice(0, 20).map(c => svc().listRegistrations({
-            competitionId: c.id
-        })));
-        const allRegs = regs.flat();
-        root.innerHTML = `<div class="admin-kpi-grid"><div class="syka-card admin-kpi"><strong>${mine.length}</strong><span>Kompetisi dikelola</span></div><div class="syka-card admin-kpi"><strong>${mine.filter(x=>x.status==='REGISTRATION_OPEN').length}</strong><span>Registration open</span></div><div class="syka-card admin-kpi"><strong>${allRegs.filter(r=>['APPROVED','ACTIVE'].includes(r.status)).length}</strong><span>Peserta approved</span></div><div class="syka-card admin-kpi"><strong>${allRegs.filter(r=>r.status==='PENDING').length}</strong><span>Pending approval</span></div></div><section class="syka-card admin-section"><div class="admin-section-head"><div><span class="eyebrow">LIFECYCLE</span><h2>Kompetisi terakhir</h2></div><button class="btn btn-primary btn-sm" id="new-org-comp">+ Kompetisi</button></div><div class="admin-table">${mine.slice(0,10).map(c=>`<div class="admin-row"><div><strong>${esc(c.title)}</strong><small>${esc(c.status)} · ${fmt(c.created_at)}</small></div><span class="chip">${esc(c.slug)}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi pertama dari tombol di atas.'})}</div></section>`;
-        document.getElementById('new-org-comp').onclick = () => competitionModal(orgId, null);
-    }
-    async function competitions(root, orgId) {
-        const rows = (await svc().listCompetitionsAdmin({
-            limit: 200
-        })).filter(x => x.organizer_id === orgId);
-        root.innerHTML = `<div class="control-local-head"><div><h2>Kompetisi</h2><span>Draft sampai archive sesuai state machine.</span></div><button class="btn btn-primary" id="org-comp-new">+ Kompetisi</button></div><div class="admin-table">${rows.map(c=>`<div class="admin-row"><div><strong>${esc(c.title)}</strong><small>${esc(c.category)} · ${esc(c.slug)}</small><div class="chip-row"><span class="chip">${esc(c.status)}</span><span class="chip">Reg: ${fmt(c.registration_starts_at)} — ${fmt(c.registration_ends_at)}</span></div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="${c.id}">Edit</button><button class="btn btn-primary btn-sm" data-trans="${c.id}">Transisi</button></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi pertama.'})}</div>`;
-        root.querySelector('#org-comp-new').onclick = () => competitionModal(orgId, null);
-        root.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => competitionModal(orgId, rows.find(x => x.id === b.dataset.edit)));
-        root.querySelectorAll('[data-trans]').forEach(b => transitionModal(rows.find(x => x.id === b.dataset.trans)));
-    }
-
-    function competitionModal(orgId, current) {
-        const p = current || {};
-        window.SYKA_MODAL.open({
-            title: current ? 'Edit kompetisi' : 'Buat kompetisi',
-            wide: true,
-            html: `<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><label>Deskripsi singkat<textarea id="short">${esc(p.short_description||'')}</textarea></label><label>Deskripsi lengkap<textarea id="desc">${esc(p.description||'')}</textarea></label><div class="form-grid-2"><label>Kategori<input id="cat" value="${esc(p.category||'Kompetisi')}"></label><label>Visibility<select id="vis"><option>PUBLIC</option><option>UNLISTED</option><option>PRIVATE</option></select></label></div><div class="form-grid-2"><label>Pendaftaran mulai<input id="rs" type="datetime-local"></label><label>Pendaftaran selesai<input id="re" type="datetime-local"></label></div><div class="form-grid-2"><label>Competition mulai<input id="s" type="datetime-local"></label><label>Competition selesai<input id="e" type="datetime-local"></label></div><label>Pengumuman<input id="a" type="datetime-local"></label><label>Poster URL<input id="poster" placeholder="https://..." value="${esc(p.poster_url||'')}"></label><label>Juknis URL<input id="juknis" value="${esc(p.juknis_url||'')}"></label><div class="form-actions"><button class="btn btn-ghost" type="button" data-close>Batal</button><button class="btn btn-primary">Simpan DRAFT</button></div><div id="fb"></div></form>`,
-            onOpen: body => {
-                const f = body.querySelector('#ocf');
-                body.querySelector('#vis').value = p.visibility || 'PUBLIC';
-                const set = (id, v) => {
-                    if (v) body.querySelector(id).value = new Date(v).toISOString().slice(0, 16);
-                };
-                set('#rs', p.registration_starts_at);
-                set('#re', p.registration_ends_at);
-                set('#s', p.starts_at);
-                set('#e', p.ends_at);
-                set('#a', p.announcement_at);
-                f.onsubmit = async e => {
-                    e.preventDefault();
-                    const d = x => x ? new Date(x).toISOString() : null;
-                    try {
-                        const payload = {
-                            organizer_id: orgId,
-                            title: f.querySelector('#title').value.trim(),
-                            slug: f.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, ''),
-                            short_description: f.querySelector('#short').value.trim(),
-                            description: f.querySelector('#desc').value.trim(),
-                            category: f.querySelector('#cat').value.trim() || 'Kompetisi',
-                            visibility: f.querySelector('#vis').value,
-                            registration_starts_at: d(f.querySelector('#rs').value),
-                            registration_ends_at: d(f.querySelector('#re').value),
-                            starts_at: d(f.querySelector('#s').value),
-                            ends_at: d(f.querySelector('#e').value),
-                            announcement_at: d(f.querySelector('#a').value),
-                            poster_url: f.querySelector('#poster').value.trim() || null,
-                            juknis_url: f.querySelector('#juknis').value.trim() || null
-                        };
-                        await svc().saveCompetition(payload, current?.id || null);
-                        window.SYKA_MODAL.close();
-                        window.SYKA_TOAST.show('Kompetisi tersimpan sebagai DRAFT.', 'success');
-                        window.SYKA_ROUTER.refresh();
-                    } catch (err) {
-                        f.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                    }
-                };
-            }
-        });
-    }
-
-    function transitionModal(c) {
-        const next = ['PUBLISHED', 'REGISTRATION_OPEN', 'REGISTRATION_CLOSED', 'LIVE', 'SUBMISSION_CLOSED', 'GRADING', 'RESULT_PUBLISHED', 'ARCHIVED', 'SUSPENDED', 'CANCELLED'];
-        window.SYKA_MODAL.open({
-            title: 'Competition state machine',
-            html: `<form id="tm" class="form-card"><p>Current: <b>${esc(c.status)}</b></p><label>Target<select id="to">${next.map(x=>`<option>${x}</option>`).join('')}</select></label><label>Reason<textarea id="reason"></textarea></label><button class="btn btn-primary">Apply transition</button><div id="fb"></div></form>`,
-            onOpen: body => body.querySelector('#tm').onsubmit = async e => {
-                e.preventDefault();
-                try {
-                    await svc().transitionCompetition(c.id, body.querySelector('#to').value, body.querySelector('#reason').value);
-                    window.SYKA_MODAL.close();
-                    window.SYKA_TOAST.show('State competition diperbarui.', 'success');
-                    window.SYKA_ROUTER.refresh();
-                } catch (err) {
-                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                }
-            }
-        });
-    }
-    async function participants(root, orgId) {
-        const comps = (await svc().listCompetitionsAdmin({
-            limit: 200
-        })).filter(x => x.organizer_id === orgId);
-        let rows = [];
-        for (const c of comps.slice(0, 20)) {
-            const rs = await svc().listRegistrations({
-                competitionId: c.id
-            });
-            rows.push(...rs);
-        }
-        root.innerHTML = `<div class="control-local-head"><div><h2>Peserta</h2><span>Approval, reject, twibbon evidence.</span></div><select class="compact-select" id="p-filter"><option value="">Semua status</option><option>PENDING</option><option>APPROVED</option><option>ACTIVE</option><option>REJECTED</option></select></div><div class="admin-table" id="participants">${rows.map(r=>`<div class="admin-row" data-status="${r.status}"><div><strong>${esc(r.profiles?.full_name||r.user_id)}</strong><small>${esc(r.competitions?.title||'')} · @${esc(r.profiles?.username||'—')} · ${esc(r.profiles?.grade||'—')} · ${esc(r.profiles?.institution||'—')}</small><div class="chip-row"><span class="chip">${esc(r.status)}</span>${r.twibbon_asset_url?'<span class="chip">Twibbon ada</span>':''}</div></div><div class="row-actions">${r.status==='PENDING'?`<button class="btn btn-primary btn-sm" data-review="${r.id}" data-decision="APPROVED">Approve</button><button class="btn btn-danger btn-sm" data-review="${r.id}" data-decision="REJECTED">Reject</button>`:''}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada peserta',text:'Registrasi peserta akan muncul di sini.'})}</div>`;
-        document.getElementById('p-filter').onchange = e => document.querySelectorAll('#participants .admin-row').forEach(r => r.style.display = !e.target.value || r.dataset.status === e.target.value ? 'flex' : 'none');
-        root.querySelectorAll('[data-review]').forEach(b => b.onclick = () => reviewModal(b.dataset.review, b.dataset.decision));
-    }
-
-    function reviewModal(id, decision) {
-        window.SYKA_MODAL.open({
-            title: decision === 'APPROVED' ? 'Approve peserta' : 'Reject peserta',
-            html: `<form id="rf" class="form-card"><label>Reason / catatan<textarea id="reason"></textarea></label><button class="btn ${decision==='APPROVED'?'btn-primary':'btn-danger'}">${decision==='APPROVED'?'Approve':'Reject'}</button><div id="fb"></div></form>`,
-            onOpen: body => body.querySelector('#rf').onsubmit = async e => {
-                e.preventDefault();
-                try {
-                    await svc().reviewRegistration(id, decision, body.querySelector('#reason').value);
-                    window.SYKA_MODAL.close();
-                    window.SYKA_TOAST.show('Registration diperbarui.', 'success');
-                    window.SYKA_ROUTER.refresh();
-                } catch (err) {
-                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                }
-            }
-        });
-    }
-    async function questions(root, orgId) {
-        const [banks, qs] = await Promise.all([svc().listQuestionBanks({
-            organizerId: orgId
-        }), svc().listQuestions({})]);
-        const mine = qs.filter(q => banks.some(b => b.id === q.question_bank_id) || q.status);
-        root.innerHTML = `<div class="control-local-head"><div><h2>Question Builder</h2><span>Bank soal, tipe soal, answer key, scoring.</span></div><div class="row-actions"><button class="btn btn-ghost btn-sm" id="qb">+ Bank</button><button class="btn btn-primary btn-sm" id="qq">+ Soal</button></div></div><div class="control-grid-2"><section><h3>Bank Soal</h3><div class="admin-table">${banks.map(b=>`<div class="admin-row"><div><strong>${esc(b.name)}</strong><small>${esc(b.status)} · ${esc(b.description||'')}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada bank',text:'Buat bank soal.'})}</div></section><section><h3>Questions</h3><div class="admin-table">${mine.map(q=>`<div class="admin-row"><div><strong>${esc(q.prompt)}</strong><small>${esc(q.type)} · ${q.points} poin · ${esc(q.status)}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada soal',text:'Buat soal pertama.'})}</div></section></div>`;
-        root.querySelector('#qb').onclick = () => bankModal(orgId);
-        root.querySelector('#qq').onclick = () => questionModal();
-    }
-
-    function bankModal(orgId) {
-        window.SYKA_MODAL.open({
-            title: 'Question Bank',
-            html: `<form id="bf" class="form-card"><label>Nama *<input id="name" required></label><label>Deskripsi<textarea id="desc"></textarea></label><button class="btn btn-primary">Simpan</button><div id="fb"></div></form>`,
-            onOpen: body => body.querySelector('#bf').onsubmit = async e => {
-                e.preventDefault();
-                try {
-                    const a = window.SYKA_STATE.getState().auth;
-                    await svc().saveQuestionBank({
-                        organizer_id: orgId,
-                        owner_user_id: a.user.id,
-                        name: body.querySelector('#name').value.trim(),
-                        description: body.querySelector('#desc').value.trim(),
-                        status: 'DRAFT'
-                    });
-                    window.SYKA_MODAL.close();
-                    window.SYKA_TOAST.show('Bank soal dibuat.', 'success');
-                    window.SYKA_ROUTER.refresh();
-                } catch (err) {
-                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                }
-            }
-        });
-    }
-
-    function questionModal() {
-        window.SYKA_MODAL.open({
-            title: 'Question Builder',
-            wide: true,
-            html: `<form id="qf" class="form-card"><label>Pertanyaan *<textarea id="prompt" required></textarea></label><div class="form-grid-2"><label>Type<select id="type"><option value="multiple_choice">Multiple Choice</option><option value="checkbox">Checkbox</option><option value="essay">Essay</option><option value="file">File</option></select></label><label>Points<input id="points" type="number" value="1" step="0.5"></label></div><label>Question Bank ID<input id="bank"></label><label>Competition ID<input id="comp"></label><button class="btn btn-primary">Simpan</button><div id="fb"></div></form>`,
-            onOpen: body => body.querySelector('#qf').onsubmit = async e => {
-                e.preventDefault();
-                try {
-                    await svc().saveQuestion({
-                        prompt: body.querySelector('#prompt').value.trim(),
-                        type: body.querySelector('#type').value,
-                        points: Number(body.querySelector('#points').value || 1),
-                        required: true,
-                        question_bank_id: body.querySelector('#bank').value.trim() || null,
-                        competition_id: body.querySelector('#comp').value.trim() || null,
-                        status: 'DRAFT',
-                        config: {}
-                    });
-                    window.SYKA_MODAL.close();
-                    window.SYKA_TOAST.show('Soal dibuat.', 'success');
-                    window.SYKA_ROUTER.refresh();
-                } catch (err) {
-                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                }
-            }
-        });
-    }
-    async function grading(root, orgId) {
-        const comps = (await svc().listCompetitionsAdmin({
-            limit: 200
-        })).filter(x => x.organizer_id === orgId);
-        let rows = [];
-        for (const c of comps) rows.push(...await svc().listAttempts({
-            competitionId: c.id
-        }));
-        root.innerHTML = `<div class="control-local-head"><div><h2>Grading</h2><span>Auto/manual grading dan finalize score.</span></div><select id="gstatus" class="compact-select"><option value="">Semua status</option><option>SUBMITTED</option><option>GRADING</option><option>FINALIZED</option></select></div><div class="admin-table" id="grading-list">${rows.map(a=>`<div class="admin-row" data-status="${a.status}"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · ${esc(a.status)} · Score ${a.score}</small></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-grade="${a.id}">Grade</button>${a.status!=='FINALIZED'?`<button class="btn btn-primary btn-sm" data-final="${a.id}">Finalize</button>`:''}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada attempt',text:'Attempt akan muncul saat peserta submit.'})}</div>`;
-        document.getElementById('gstatus').onchange = e => document.querySelectorAll('#grading-list .admin-row').forEach(r => r.style.display = !e.target.value || r.dataset.status === e.target.value ? 'flex' : 'none');
-        root.querySelectorAll('[data-grade]').forEach(b => b.onclick = () => gradeModal(b.dataset.grade));
-        root.querySelectorAll('[data-final]').forEach(b => b.onclick = () => finalizeModal(b.dataset.final));
-    }
-    async function gradeModal(attemptId) {
-        try {
-            const items = await svc().listGradingItems(attemptId);
-            window.SYKA_MODAL.open({
-                title: 'Grade attempt',
-                wide: true,
-                html: `<form id="grf" class="form-card">${items.map((i,n)=>`<div class="grade-row"><strong>Item ${n+1}</strong><div class="form-grid-2"><label>Score<input type="number" step="0.01" data-score="${i.id}" value="${i.score}"></label><label>Feedback<input data-feedback="${i.id}" value="${esc(i.feedback||'')}"></label></div></div>`).join('')||'<p class="muted">Belum ada manual grading item.</p>'}<button class="btn btn-primary">Simpan grading</button><div id="fb"></div></form>`,
-                onOpen: body => {
-                    body.querySelector('#grf').onsubmit = async e => {
-                        e.preventDefault();
-                        try {
-                            for (const i of items) {
-                                await svc().saveGrade({
-                                    attempt_id: attemptId,
-                                    question_id: i.question_id,
-                                    grader_id: window.SYKA_STATE.getState().auth.user.id,
-                                    score: Number(body.querySelector(`[data-score="${i.id}"]`).value || 0),
-                                    feedback: body.querySelector(`[data-feedback="${i.id}"]`).value || null
-                                }, i.id);
-                            }
-                            window.SYKA_MODAL.close();
-                            window.SYKA_TOAST.show('Grading tersimpan.', 'success');
-                        } catch (err) {
-                            body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                        }
-                    };
-                }
-            });
-        } catch (e) {
-            window.SYKA_TOAST.show(e.message, 'error');
-        }
-    }
-
-    function finalizeModal(id) {
-        window.SYKA_MODAL.open({
-            title: 'Finalize result',
-            html: `<form id="ff" class="form-card"><label>Score final<input id="score" type="number" step="0.01" required></label><button class="btn btn-primary">Finalize</button><div id="fb"></div></form>`,
-            onOpen: body => body.querySelector('#ff').onsubmit = async e => {
-                e.preventDefault();
-                try {
-                    await svc().finalizeAttempt(id, body.querySelector('#score').value);
-                    window.SYKA_MODAL.close();
-                    window.SYKA_TOAST.show('Result final.', 'success');
-                    window.SYKA_ROUTER.refresh();
-                } catch (err) {
-                    body.querySelector('#fb').innerHTML = `<div class="inline-error">${esc(err.message)}</div>`;
-                }
-            }
-        });
-    }
-    async function results(root, orgId) {
-        const comps = (await svc().listCompetitionsAdmin({
-            limit: 200
-        })).filter(x => x.organizer_id === orgId);
-        let rows = [];
-        for (const c of comps) rows.push(...await svc().listAttempts({
-            competitionId: c.id,
-            status: 'FINALIZED'
-        }));
-        root.innerHTML = `<div class="control-local-head"><div><h2>Results</h2><span>Preview hasil dan publish result dilakukan via competition state.</span></div></div><div class="admin-table">${rows.map(a=>`<div class="admin-row"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · Score ${a.score} · finalized ${fmt(a.finalized_at)}</small></div><span class="chip">FINALIZED</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada hasil finalized',text:'Finalisasi attempt dari Grading.'})}</div>`;
-    }
-    async function awards(root, orgId) {
-        const comps = (await svc().listCompetitionsAdmin({
-            limit: 200
-        })).filter(x => x.organizer_id === orgId);
-        let rows = [];
-        for (const c of comps) rows.push(...await svc().listAwards({
-            competitionId: c.id
-        }));
-        root.innerHTML = `<div class="control-local-head"><div><h2>Awards</h2><span>Achievement dan emblem peserta.</span></div></div><div class="admin-table">${rows.map(a=>`<div class="admin-row"><div><strong>${esc(a.profiles?.full_name||a.user_id)}</strong><small>${esc(a.competitions?.title||'')} · ${esc(a.rank_code||'PARTICIPANT')} · ${esc(a.title)}</small></div><span class="chip">${a.points} pts</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada award',text:'Award event akan muncul setelah result publish.'})}</div>`;
-    }
-    async function certificates(root, orgId) {
-        const comps = (await svc().listCompetitionsAdmin({
-            limit: 200
-        })).filter(x => x.organizer_id === orgId);
-        let rows = [];
-        for (const c of comps) rows.push(...await svc().listCertificates({
-            competitionId: c.id
-        }));
-        root.innerHTML = `<div class="control-local-head"><div><h2>Certificates</h2><span>DRAFT → GENERATED → REVIEW → APPROVED → PUBLISHED → REVOKED</span></div></div><div class="admin-table">${rows.map(x=>`<div class="admin-row"><div><strong>${esc(x.profiles?.full_name||x.user_id)}</strong><small>${esc(x.competitions?.title||'')} · rev ${x.current_revision}</small></div><div class="row-actions">${['GENERATED','REVIEW','APPROVED','PUBLISHED','REVOKED'].map(s=>`<button class="btn btn-ghost btn-sm" data-cert="${x.id}" data-status="${s}">${s}</button>`).join('')}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada certificate',text:'Certificate dibuat setelah award/result.'})}</div>`;
-        root.querySelectorAll('[data-cert]').forEach(b => b.onclick = async () => {
-            try {
-                await svc().updateCertificate(b.dataset.cert, b.dataset.status);
-                window.SYKA_TOAST.show('Certificate diperbarui.', 'success');
-                window.SYKA_ROUTER.refresh();
-            } catch (e) {
-                window.SYKA_TOAST.show(e.message, 'error');
-            }
-        });
-    }
-    async function twibbon(root, orgId) {
-        const rows = await svc().listTwibbonTemplates({
-            organizerId: orgId
-        });
-        root.innerHTML = `<div class="control-local-head"><div><h2>Twibbon</h2><span>Template dan review asset peserta.</span></div><button class="btn btn-primary" id="new-tw">+ Template</button></div><div class="admin-table">${rows.map(t=>`<div class="admin-row"><div><strong>${esc(t.name)}</strong><small>${esc(t.competition_id||'Global')} · ${t.is_required?'Wajib':'Opsional'}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada template',text:'Tambah template untuk competition.'})}</div>`;
-        root.querySelector('#new-tw').onclick = () => twModal(orgId);
-    }
-
-    function twModal(orgId) {
-        window.SYKA_MODAL.open({
-            title: 'Twibbon template',
-            html: `<form id="twf" class="form-card"><label>Nama *<input id="name" required></label><label>Competition ID<input id="cid"></label><label>Image URL<input id="url"></label><label>Public ID<input id="pid"></label><label class="checkline"><input id="req" type="checkbox"> Required</label><button class="btn btn-primary">Simpan</button></form>`,
-            onOpen: body => body.querySelector('#twf').onsubmit = async e => {
-                e.preventDefault();
-                try {
-                    await svc().saveTwibbonTemplate({
-                        organizer_id: orgId,
-                        competition_id: body.querySelector('#cid').value.trim() || null,
-                        name: body.querySelector('#name').value.trim(),
-                        image_url: body.querySelector('#url').value.trim() || null,
-                        public_id: body.querySelector('#pid').value.trim() || null,
-                        is_required: body.querySelector('#req').checked
-                    });
-                    window.SYKA_MODAL.close();
-                    window.SYKA_TOAST.show('Template tersimpan.', 'success');
-                    window.SYKA_ROUTER.refresh();
-                } catch (err) {
-                    window.SYKA_TOAST.show(err.message, 'error');
-                }
-            }
-        });
-    }
-    async function notifications(root) {
-        const rows = await window.SYKA_NOTIFICATION_SERVICE.list?.() || [];
-        root.innerHTML = `<div class="control-local-head"><div><h2>Notifikasi</h2><span>Domain events akan muncul setelah backend event handlers aktif.</span></div></div>${rows.length?`<div class="admin-table">${rows.map(n=>`<div class="admin-row"><div><strong>${esc(n.title)}</strong><small>${esc(n.body||'')} · ${fmt(n.created_at)}</small></div></div>`).join('')}</div>`:window.SYKA_EMPTY.render({title:'Belum ada event',text:'Notification record disimpan di database, bukan hanya toast.'})}`;
-    }
-    async function plan(root, orgId) {
-        const plans = await svc().listPlans();
-        const ents = await svc().listEntitlements();
-        const mine = plans.filter(p => p.organizer_id === orgId && p.is_active)[0];
-        root.innerHTML = `<div class="control-grid-2"><section class="syka-card admin-section"><span class="eyebrow">CURRENT PLAN</span><h2>${esc(mine?.plan_code||'FREE')}</h2><p>${mine?`Aktif sejak ${fmt(mine.starts_at)}${mine.ends_at?` sampai ${fmt(mine.ends_at)}`:''}`:'Belum ada organizer plan aktif. Fallback: FREE.'}</p></section><section class="syka-card admin-section"><span class="eyebrow">ENTITLEMENT</span><div class="admin-table">${ents.filter(e=>e.plan_code===(mine?.plan_code||'FREE')).map(e=>`<div class="admin-row"><div><strong>${esc(e.capability)}</strong><small>Limit: ${e.limit_value??'—'}</small></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada entitlement',text:'Admin dapat mengatur capability pada panel Plans.'})}</div></section></div>`;
-    }
-    window.SYKA_PAGE_ORGANIZER = {
-        render
-    };
+(function(){
+  const svc=()=>window.SYKA_CONTROL_SERVICE;const esc=window.SYKA_UTILS.escapeHtml;const fmt=window.SYKA_UTILS.formatDateTime;
+  const tabs=[['dashboard','Dashboard'],['competitions','Kompetisi'],['participants','Peserta'],['questions','Soal'],['grading','Grading'],['results','Hasil'],['awards','Awards'],['certificates','Sertifikat'],['twibbon','Twibbon'],['notifications','Notifikasi'],['plan','Plan & Usage']];
+  const transitions={DRAFT:['PUBLISHED','SUSPENDED','CANCELLED'],PUBLISHED:['REGISTRATION_OPEN','SUSPENDED','CANCELLED'],REGISTRATION_OPEN:['REGISTRATION_CLOSED','SUSPENDED','CANCELLED'],REGISTRATION_CLOSED:['LIVE','SUSPENDED','CANCELLED'],LIVE:['SUBMISSION_CLOSED','SUSPENDED','CANCELLED'],SUBMISSION_CLOSED:['GRADING','SUSPENDED','CANCELLED'],GRADING:['RESULT_PUBLISHED','SUSPENDED'],RESULT_PUBLISHED:['ARCHIVED','SUSPENDED'],SUSPENDED:['DRAFT','PUBLISHED','REGISTRATION_OPEN','REGISTRATION_CLOSED','LIVE','SUBMISSION_CLOSED','GRADING','RESULT_PUBLISHED','CANCELLED']};
+  async function membership(){const a=window.SYKA_STATE.getState().auth;const list=await svc().listMyOrganizerMemberships(a.user?.id).catch(()=>[]);return list[0]?.organizer_id||null;}
+  function shell(tab){return `<div class="control-head"><div><span class="eyebrow">ORGANIZER CONTROL PLANE</span><h1>Panel Penyelenggara</h1><p>Kelola kompetisi, peserta, soal, hasil, awards, certificate, twibbon, dan entitlement dari satu workspace.</p></div><div class="control-head-meta"><span class="security-badge">Plan & permission server-side</span></div></div><div class="control-tabs">${tabs.map(([k,l])=>`<button type="button" class="control-tab ${tab===k?'active':''}" data-tab="${k}">${l}</button>`).join('')}</div><div id="organizer-content"></div>`;}
+  async function render(root){const auth=window.SYKA_STATE.getState().auth;if(!auth.user){root.innerHTML=window.SYKA_EMPTY.render({title:'Masuk diperlukan',text:'Panel penyelenggara hanya untuk organizer yang aktif.',actionHtml:'<button class="btn btn-primary" id="org-login">Masuk</button>'});document.getElementById('org-login')?.addEventListener('click',()=>window.SYKA_APP.openAuth('login',{target:'/organizer'}));return;}if(!auth.roles.includes('organizer_member')&&!auth.roles.includes('admin')){root.innerHTML=window.SYKA_EMPTY.render({title:'Akses belum tersedia',text:'Akun ini belum menjadi anggota organizer aktif. Minta admin menambahkan membership organizer.'});return;}const q=window.SYKA_STATE.getState().route.query;const tab=tabs.some(([k])=>k===q.tab)?q.tab:'dashboard';root.innerHTML=shell(tab);root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>window.SYKA_ROUTER.navigate('/organizer',{tab:b.dataset.tab}));try{const orgId=auth.roles.includes('admin')?q.organizer||await membership():await membership();if(!orgId){document.getElementById('organizer-content').innerHTML=window.SYKA_EMPTY.render({title:'Belum ada organizer',text:'Akun sudah memiliki role organizer, tetapi belum memiliki membership ke organisasi tertentu.'});return;}await renderTab(document.getElementById('organizer-content'),tab,orgId);}catch(error){document.getElementById('organizer-content').innerHTML=window.SYKA_EMPTY.render({title:'Modul gagal dimuat',text:error.message||'Periksa organizer_members/RLS.'});}}
+  async function renderTab(root,tab,orgId){const map={dashboard,competitions,participants,questions,grading,results,awards,certificates,twibbon,notifications,plan};return map[tab]?.(root,orgId);}
+  async function dashboard(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});const regs=await svc().listRegistrations({});const mineRegs=regs.filter(r=>comps.some(c=>c.id===r.competition_id));const attempts=await svc().listAttempts({});const mineAttempts=attempts.filter(a=>comps.some(c=>c.id===a.competition_id));root.innerHTML=`<div class="kpi-grid"><div class="kpi-card"><span>Kompetisi</span><strong>${comps.length}</strong><small>milik organizer</small></div><div class="kpi-card"><span>Pending peserta</span><strong>${mineRegs.filter(r=>r.status==='PENDING').length}</strong><small>perlu review</small></div><div class="kpi-card"><span>Attempt submitted</span><strong>${mineAttempts.filter(a=>a.status==='SUBMITTED').length}</strong><small>siap grading</small></div><div class="kpi-card"><span>Live</span><strong>${comps.filter(c=>c.status==='LIVE').length}</strong><small>kompetisi berjalan</small></div></div><section class="panel-card admin-section"><div class="panel-head"><div><span class="eyebrow">WORKSPACE</span><h2>Kompetisi aktif</h2></div><button class="btn btn-primary btn-sm" id="org-new-comp">+ Kompetisi</button></div><div class="mini-list">${comps.slice(0,8).map(c=>`<div class="mini-list-row"><div><strong>${esc(c.title)}</strong><small>${esc(c.category)} · ${esc(c.status)} · mulai ${fmt(c.starts_at)}</small></div><span class="status-pill ${window.SYKA_UTILS.statusClass(c.status)}">${esc(c.status)}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi pertama untuk organizer ini.'})}</div></section>`;document.getElementById('org-new-comp').onclick=()=>competitionModal(orgId);}
+  async function competitions(root,orgId){const rows=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});root.innerHTML=`<div class="toolbar"><div><h2>Kompetisi</h2><p>Lifecycle dan konfigurasi kompetisi.</p></div><button class="btn btn-primary" id="new-org-comp">+ Buat kompetisi</button></div><div class="data-table">${rows.map(c=>`<div class="data-row"><div><div class="row-title"><strong>${esc(c.title)}</strong><span class="status-pill ${window.SYKA_UTILS.statusClass(c.status)}">${esc(c.status)}</span></div><small>${esc(c.category)} · registrasi ${fmt(c.registration_starts_at)} → ${fmt(c.registration_ends_at)} · live ${fmt(c.starts_at)}</small></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="${c.id}">Edit</button><button class="btn btn-secondary btn-sm" data-config="${c.id}">Config</button><button class="btn btn-primary btn-sm" data-transition="${c.id}">Transisi</button></div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada kompetisi',text:'Buat kompetisi dari tombol di atas.'})}</div>`;document.getElementById('new-org-comp').onclick=()=>competitionModal(orgId);root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>competitionModal(orgId,rows.find(c=>c.id===b.dataset.edit)));root.querySelectorAll('[data-config]').forEach(b=>b.onclick=()=>configModal(rows.find(c=>c.id===b.dataset.config)));root.querySelectorAll('[data-transition]').forEach(b=>b.onclick=()=>transitionModal(rows.find(c=>c.id===b.dataset.transition)));}
+  function dateField(id,label,value,required=false){return `<label>${label}${required?' *':''}<div class="date-control"><span>◷</span><input id="${id}" type="datetime-local" ${required?'required':''} value="${window.SYKA_UTILS.escapeHtml(window.SYKA_UTILS.toLocalInputValue(value))}"></div></label>`;}
+  async function competitionModal(orgId,current=null){const p=current||{};window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><div class="form-grid-2"><label>Kategori<input id="category" value="${esc(p.category||'Kompetisi')}"></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short">${esc(p.short_description||'')}</textarea></label><label>Poster URL<input id="poster" type="url" value="${esc(p.poster_url||'')}" placeholder="Cloudinary secure_url"></label><div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2></div></div><div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ann','Pengumuman',p.announcement_at,false)}<div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div></form>`,onOpen:b=>b.querySelector('#ocf').onsubmit=async e=>{e.preventDefault();try{const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:b.querySelector('#poster').value.trim()||null,registration_starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#rs').value),registration_ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#re').value),starts_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#start').value),ends_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#end').value),announcement_at:window.SYKA_UTILS.localInputToISO(b.querySelector('#ann').value)};await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#oc-feedback').innerHTML=`<div class="inline-error">${esc(error.message)}</div>`;}}});}
+  function transitionModal(c){const choices=transitions[c.status]||[];if(!choices.length){window.SYKA_TOAST.show(`Tidak ada transisi valid dari ${c.status}.`,'warning');return;}window.SYKA_MODAL.open({title:'Ubah status kompetisi',html:`<div class="transition-current"><span>STATUS SAAT INI</span><strong>${esc(c.status)}</strong></div><form id="otf" class="form-card"><label>Status tujuan<select id="target">${choices.map(s=>`<option>${s}</option>`).join('')}</select></label><label>Alasan<textarea id="reason" placeholder="Mengapa status ini diubah?"></textarea></label><button class="btn btn-primary btn-block">Terapkan</button><div class="form-hint">Backend akan memvalidasi lifecycle dan mencatat audit.</div></form>`,onOpen:b=>b.querySelector('#otf').onsubmit=async e=>{e.preventDefault();try{await svc().transitionCompetition(c.id,b.querySelector('#target').value,b.querySelector('#reason').value.trim()||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Status kompetisi diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
+  function configModal(c){window.SYKA_MODAL.open({title:`Config · ${c.title}`,html:`<div class="config-grid"><button class="config-card" id="lvl"><span>◫</span><strong>Jenjang</strong><small>Grade, points, level kompetisi.</small></button><button class="config-card" id="rules"><span>◌</span><strong>Registrasi</strong><small>Eligibility, twibbon, quota.</small></button><button class="config-card" id="reward"><span>✦</span><strong>Reward</strong><small>Juara, poin, emblem.</small></button></div>`,onOpen:b=>{b.querySelector('#lvl').onclick=()=>levelModal(c.id);b.querySelector('#rules').onclick=()=>rulesModal(c.id);b.querySelector('#reward').onclick=()=>rewardModal(c.id);}});}
+  async function levelModal(id){
+    const rows=await svc().listLevels(id);
+    const html=rows.length?rows.map(r=>`<div class="list-card"><strong>${esc(r.label)}</strong><small>${esc(r.code)} · ${(r.allowed_grades||[]).join(', ')}</small><span>${r.points} pts</span></div>`).join(''):'<div class="empty-inline">Belum ada level.</div>';
+    window.SYKA_MODAL.open({title:'Jenjang kompetisi',html:`<div class="modal-toolbar"><button class="btn btn-primary btn-sm" id="new-level">+ Level</button></div><div class="stack-list">${html}</div>`,onOpen:b=>{
+      b.querySelector('#new-level').onclick=()=>window.SYKA_MODAL.open({title:'Tambah level',html:`<form id="lf" class="form-card"><label>Kode<input id="code" required></label><label>Label<input id="label" required></label><label>Allowed grades<textarea id="grades">SD6</textarea></label><label>Points<input id="points" type="number" value="0"></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:x=>{
+        x.querySelector('#lf').onsubmit=async e=>{e.preventDefault();try{await svc().saveLevel({competition_id:id,code:x.querySelector('#code').value.trim(),label:x.querySelector('#label').value.trim(),allowed_grades:x.querySelector('#grades').value.split(/[,\n]+/).map(v=>v.trim()).filter(Boolean),points:Number(x.querySelector('#points').value||0),config:{}});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Level tersimpan.','success');levelModal(id);}catch(error){x.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}};
+      }});
+    }});
+  }
+  async function rulesModal(id){
+    const r=await svc().getRegistrationRules(id)||{};
+    window.SYKA_MODAL.open({title:'Aturan pendaftaran',html:`<form id="rf" class="form-card"><label>Allowed grades<textarea id="grades">${esc((r.allowed_grades||[]).join('\n'))}</textarea></label><label class="checkline"><input id="twibbon" type="checkbox" ${r.require_twibbon?'checked':''}> Wajib twibbon</label><label class="checkline"><input id="social" type="checkbox" ${r.require_social_proof?'checked':''}> Wajib social proof</label><label>Maximum peserta<input id="max" type="number" min="1" value="${r.max_participants||''}"></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:b=>{
+      b.querySelector('#rf').onsubmit=async e=>{e.preventDefault();try{await svc().saveRegistrationRules({allowed_grades:b.querySelector('#grades').value.split(/[,\n]+/).map(v=>v.trim()).filter(Boolean),require_twibbon:b.querySelector('#twibbon').checked,require_social_proof:b.querySelector('#social').checked,max_participants:b.querySelector('#max').value?Number(b.querySelector('#max').value):null,config:{}},id);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Aturan tersimpan.','success');}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}};
+    }});
+  }
+  async function rewardModal(id){
+    const rows=await svc().listRewards(id);
+    const html=rows.length?rows.map(r=>`<div class="list-card"><strong>${esc(r.rank_code)}</strong><small>${esc(r.title||'Reward')}</small><span>${r.points} pts</span></div>`).join(''):'<div class="empty-inline">Belum ada reward.</div>';
+    window.SYKA_MODAL.open({title:'Reward kompetisi',html:`<div class="modal-toolbar"><button class="btn btn-primary btn-sm" id="new-reward">+ Reward</button></div><div class="stack-list">${html}</div>`,onOpen:b=>{
+      b.querySelector('#new-reward').onclick=()=>window.SYKA_MODAL.open({title:'Tambah reward',html:`<form id="rew" class="form-card"><label>Rank code<input id="rank" required></label><label>Title<input id="title" required></label><label>Points<input id="points" type="number" value="0"></label><label>Emblem<input id="emblem"></label><label class="checkline"><input id="cert" type="checkbox" checked> Certificate enabled</label><button class="btn btn-primary">Simpan</button></form>`,onOpen:x=>{
+        x.querySelector('#rew').onsubmit=async e=>{e.preventDefault();try{await svc().saveReward({competition_id:id,rank_code:x.querySelector('#rank').value.trim(),title:x.querySelector('#title').value.trim(),points:Number(x.querySelector('#points').value||0),emblem_name:x.querySelector('#emblem').value.trim()||null,certificate_enabled:x.querySelector('#cert').checked,config:{}});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Reward tersimpan.','success');rewardModal(id);}catch(error){x.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}};
+      }});
+    }});
+  }
+  async function participants(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});let rows=[];for(const c of comps){const list=await svc().listRegistrations({competitionId:c.id});rows.push(...list);}root.innerHTML=`<div class="toolbar"><div><h2>Peserta</h2><p>Review registration sebelum status ACTIVE.</p></div><div class="filter-line"><select id="reg-status" class="compact-select"><option value="">Semua</option><option>PENDING</option><option>APPROVED</option><option>REJECTED</option><option>ACTIVE</option></select></div></div><div class="data-table" id="participants-table">${rows.map(r=>`<div class="data-row" data-status="${esc(r.status)}"><div class="row-main"><div class="avatar-mini">${r.profiles?.avatar_url?`<img src="${esc(r.profiles.avatar_url)}" alt="">`:esc(window.SYKA_UTILS.initials(r.profiles?.full_name||r.user_id))}</div><div><strong>${esc(r.profiles?.full_name||r.user_id)}</strong><small>${esc(r.profiles?.username||'')} · ${esc(r.profiles?.institution||'')} · ${esc(r.competitions?.title||'')}</small><div class="chip-row"><span class="status-pill ${window.SYKA_UTILS.statusClass(r.status)}">${esc(r.status)}</span></div></div></div><div class="row-actions">${r.status==='PENDING'?`<button class="btn btn-primary btn-sm" data-approve="${r.id}">Approve</button><button class="btn btn-danger-outline btn-sm" data-reject="${r.id}">Reject</button>`:''}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada peserta',text:'Registration akan masuk saat peserta mendaftar.'})}</div>`;document.getElementById('reg-status').onchange=e=>root.querySelectorAll('#participants-table .data-row').forEach(r=>r.style.display=!e.target.value||r.dataset.status===e.target.value?'flex':'none');root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>review(b.dataset.approve,'APPROVED'));root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>rejectModal(b.dataset.reject));}
+  async function review(id,decision,reason=null){try{await svc().reviewRegistration(id,decision,reason);window.SYKA_TOAST.show('Status peserta diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(error){window.SYKA_TOAST.show(error.message,'error');}}
+  function rejectModal(id){window.SYKA_MODAL.open({title:'Reject peserta',html:`<form id="rej" class="form-card"><label>Alasan penolakan *<textarea id="reason" required></textarea></label><button class="btn btn-danger">Tolak peserta</button></form>`,onOpen:b=>b.querySelector('#rej').onsubmit=async e=>{e.preventDefault();await review(id,'REJECTED',b.querySelector('#reason').value.trim());window.SYKA_MODAL.close();}});}
+  async function questions(root,orgId){const banks=await svc().listQuestionBanks({organizerId:orgId});root.innerHTML=`<div class="toolbar"><div><h2>Question Builder</h2><p>Bank soal organizer dan moderation status.</p></div><button class="btn btn-primary" id="new-bank">+ Bank soal</button></div><div class="data-table">${banks.map(b=>`<div class="data-row"><div><strong>${esc(b.name)}</strong><small>${esc(b.description||'—')} · ${esc(b.status||'DRAFT')}</small></div><span class="chip">Bank</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada bank soal',text:'Buat bank soal untuk menyusun soal kompetisi.'})}</div>`;document.getElementById('new-bank').onclick=()=>window.SYKA_MODAL.open({title:'Bank soal baru',html:`<form id="bf" class="form-card"><label>Nama bank<input id="name" required></label><label>Deskripsi<textarea id="desc"></textarea></label><label>Status<select id="status"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option></select></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:b=>b.querySelector('#bf').onsubmit=async e=>{e.preventDefault();try{await svc().saveQuestionBank({organizer_id:orgId,name:b.querySelector('#name').value.trim(),description:b.querySelector('#desc').value.trim()||null,status:b.querySelector('#status').value,config:{}});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Bank soal dibuat.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
+  async function grading(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});let rows=[];for(const c of comps)rows.push(...await svc().listAttempts({competitionId:c.id}));root.innerHTML=`<div class="toolbar"><div><h2>Grading</h2><p>Auto/manual grading dan finalize score.</p></div><select class="compact-select" id="grading-filter"><option value="">Semua status</option><option>SUBMITTED</option><option>GRADING</option><option>FINALIZED</option></select></div><div class="data-table" id="grading-table">${rows.map(a=>`<div class="data-row" data-status="${esc(a.status)}"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · ${esc(a.status)} · Score ${a.score??0}</small></div><div class="row-actions">${a.status!=='FINALIZED'?`<button class="btn btn-ghost btn-sm" data-grade="${a.id}">Grade</button><button class="btn btn-primary btn-sm" data-final="${a.id}">Finalize</button>`:'<span class="status-pill status-success">FINALIZED</span>'}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada attempt',text:'Submission peserta akan muncul ketika attempt engine aktif.'})}</div>`;document.getElementById('grading-filter').onchange=e=>root.querySelectorAll('[data-status]').forEach(r=>r.style.display=!e.target.value||r.dataset.status===e.target.value?'flex':'none');root.querySelectorAll('[data-grade]').forEach(b=>gradeModal(b.dataset.grade));root.querySelectorAll('[data-final]').forEach(b=>finalizeModal(b.dataset.final));}
+  async function gradeModal(id){const items=await svc().listGradingItems(id);window.SYKA_MODAL.open({title:'Grading attempt',wide:true,html:`<form id="gf" class="form-card">${items.map((i,n)=>`<div class="grade-item"><div><strong>Item ${n+1}</strong><small>Question ${esc(i.question_id||'')}</small></div><div class="form-grid-2"><label>Score<input type="number" step="0.01" data-score="${i.id}" value="${i.score??0}"></label><label>Feedback<input data-feedback="${i.id}" value="${esc(i.feedback||'')}"></label></div></div>`).join('')||'<div class="empty-inline">Belum ada manual grading item.</div>'}<button class="btn btn-primary">Simpan grading</button></form>`,onOpen:b=>b.querySelector('#gf').onsubmit=async e=>{e.preventDefault();try{for(const i of items){await svc().saveGrade({attempt_id:id,question_id:i.question_id,grader_id:window.SYKA_STATE.getState().auth.user.id,score:Number(b.querySelector(`[data-score="${i.id}"]`).value||0),feedback:b.querySelector(`[data-feedback="${i.id}"]`).value||null},i.id);}window.SYKA_MODAL.close();window.SYKA_TOAST.show('Grading tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
+  function finalizeModal(id){window.SYKA_MODAL.open({title:'Finalize result',html:`<form id="ff" class="form-card"><label>Score final *<input id="score" type="number" step="0.01" min="0" required></label><div class="form-hint">Finalization adalah langkah one-way pada core flow dan harus diaudit.</div><button class="btn btn-primary">Finalize result</button></form>`,onOpen:b=>b.querySelector('#ff').onsubmit=async e=>{e.preventDefault();try{await svc().finalizeAttempt(id,Number(b.querySelector('#score').value||0));window.SYKA_MODAL.close();window.SYKA_TOAST.show('Result finalized.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
+  async function results(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});let rows=[];for(const c of comps)rows.push(...await svc().listAttempts({competitionId:c.id,status:'FINALIZED'}));root.innerHTML=`<div class="toolbar"><div><h2>Hasil</h2><p>Hasil final dari semua kompetisi organizer.</p></div></div><div class="data-table">${rows.map(a=>`<div class="data-row"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · ${fmt(a.finalized_at)}</small></div><strong>${Number(a.score||0).toLocaleString('id-ID')} pts</strong></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada hasil',text:'Finalize attempt dari tab Grading untuk mengisi hasil.'})}</div>`;}
+  async function awards(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});let rows=[];for(const c of comps)rows.push(...await svc().listAwards({competitionId:c.id}));root.innerHTML=`<div class="toolbar"><div><h2>Awards</h2><p>Achievement, emblem, dan points dari result event.</p></div></div><div class="data-table">${rows.map(a=>`<div class="data-row"><div><strong>${esc(a.title)}</strong><small>${esc(a.rank_code||'PARTICIPANT')} · ${esc(a.competition_id||'')}</small></div><span class="chip">${Number(a.points||0)} pts</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada awards',text:'Award event akan muncul setelah result publication backend.'})}</div>`;}
+  async function certificates(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});let rows=[];for(const c of comps)rows.push(...await svc().listCertificates({competitionId:c.id}));root.innerHTML=`<div class="toolbar"><div><h2>Sertifikat</h2><p>DRAFT → GENERATED → REVIEW → APPROVED → PUBLISHED → REVOKED.</p></div></div><div class="data-table">${rows.map(c=>`<div class="data-row"><div><strong>${esc(c.user_id)}</strong><small>${esc(c.competition_id||'')} · revisi ${c.current_revision}</small></div><span class="status-pill ${window.SYKA_UTILS.statusClass(c.status)}">${esc(c.status)}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada certificate',text:'Certificate akan dibuat setelah award event.'})}</div>`;}
+  async function twibbon(root,orgId){const rows=await svc().listTwibbonTemplates({organizerId:orgId});root.innerHTML=`<div class="toolbar"><div><h2>Twibbon</h2><p>Template twibbon untuk kompetisi organizer.</p></div><button class="btn btn-primary" id="new-tw">+ Template</button></div><div class="data-table">${rows.map(t=>`<div class="data-row"><div><strong>${esc(t.name)}</strong><small>${esc(t.competition_id||'')} · ${t.is_required?'Wajib':'Opsional'}</small></div><span class="chip">${t.is_active?'Aktif':'Nonaktif'}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada template',text:'Tambahkan template twibbon untuk competition.'})}</div>`;document.getElementById('new-tw').onclick=()=>window.SYKA_MODAL.open({title:'Twibbon template',wide:true,html:`<form id="twf" class="form-card"><label>Competition ID<input id="cid"></label><label>Nama template<input id="name" required></label><label>Image URL<input id="url" type="url"></label><label>Public ID<input id="pid"></label><label class="checkline"><input id="req" type="checkbox"> Wajib</label><button class="btn btn-primary">Simpan</button></form>`,onOpen:b=>b.querySelector('#twf').onsubmit=async e=>{e.preventDefault();try{await svc().saveTwibbonTemplate({organizer_id:orgId,competition_id:b.querySelector('#cid').value.trim()||null,name:b.querySelector('#name').value.trim(),image_url:b.querySelector('#url').value.trim()||null,public_id:b.querySelector('#pid').value.trim()||null,is_required:b.querySelector('#req').checked,is_active:true,config:{}});window.SYKA_MODAL.close();window.SYKA_TOAST.show('Template tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
+  async function notifications(root){const a=window.SYKA_STATE.getState().auth;const rows=await window.SYKA_NOTIFICATION_SERVICE.list(a.user.id);root.innerHTML=`<div class="toolbar"><div><h2>Notifikasi</h2><p>Event dan update yang dikirim ke user organizer.</p></div></div><div class="data-table">${rows.map(n=>`<div class="data-row"><div><strong>${esc(n.title||'Notifikasi')}</strong><small>${esc(n.body||'')} · ${fmt(n.created_at)}</small></div><span class="status-pill ${n.read_at?'status-neutral':'status-success'}">${n.read_at?'Sudah dibaca':'Baru'}</span></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada notifikasi',text:'Event backend akan masuk di sini.'})}</div>`;}
+  async function plan(root,orgId){const [plans,ents]=await Promise.all([svc().listPlans(),svc().listEntitlements()]);const mine=plans.find(p=>p.organizer_id===orgId&&p.is_active);const planCode=mine?.plan_code||'FREE';root.innerHTML=`<div class="control-grid-2"><section class="panel-card"><span class="eyebrow">CURRENT PLAN</span><h2>${planCode}</h2><p>${mine?`Aktif sejak ${fmt(mine.starts_at)}${mine.ends_at?` sampai ${fmt(mine.ends_at)}`:''}`:'Belum ada plan aktif. Fallback FREE.'}</p></section><section class="panel-card"><span class="eyebrow">ENTITLEMENTS</span>${ents.filter(e=>e.plan_code===planCode).map(e=>`<div class="data-row compact"><div><strong>${esc(e.capability)}</strong><small>Limit ${e.limit_value??'—'}</small></div></div>`).join('')||'<p class="muted">Belum ada entitlement untuk plan ini.</p>'}</section></div>`;}
+  window.SYKA_PAGE_ORGANIZER={render};
 })();
