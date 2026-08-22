@@ -8,7 +8,7 @@
   async function setUserRole(id,role,active=true,reason){const{data,error}=await c().rpc('admin_set_user_role',{p_user_id:id,p_role:role,p_active:active,p_reason:reason||null});if(error)throw error;return data;}
   async function listOrganizers(){return q('organizers','id,name,slug,status,description,logo_asset_url,owner_user_id',qy=>qy.order('name',{ascending:true}).limit(200));}
   async function listMyOrganizerMemberships(userId){if(!userId)return[];return q('organizer_members','organizer_id,user_id,member_role,is_active,organizers(id,name,slug,status)',qy=>qy.eq('user_id',userId).eq('is_active',true));}
-  async function listCompetitionsAdmin({search='',status='',organizerId=null,limit=100}={}){let qy=c().from('competitions').select('id,organizer_id,title,slug,category,status,registration_starts_at,registration_ends_at,starts_at,ends_at,announcement_at,poster_url,visibility,created_at').order('created_at',{ascending:false}).limit(limit);if(search.trim())qy=qy.or(`title.ilike.%${search.trim()}%,slug.ilike.%${search.trim()}%`);if(status)qy=qy.eq('status',status);if(organizerId)qy=qy.eq('organizer_id',organizerId);const{data,error}=await qy;if(error)throw error;return data||[];}
+  async function listCompetitionsAdmin({search='',status='',organizerId=null,limit=100}={}){let qy=c().from('competitions').select('id,organizer_id,title,slug,category,status,registration_starts_at,registration_ends_at,starts_at,ends_at,announcement_at,poster_url,poster_public_id,poster_width,poster_height,poster_version,poster_resource_type,visibility,short_description,created_at').order('created_at',{ascending:false}).limit(limit);if(search.trim())qy=qy.or(`title.ilike.%${search.trim()}%,slug.ilike.%${search.trim()}%`);if(status)qy=qy.eq('status',status);if(organizerId)qy=qy.eq('organizer_id',organizerId);const{data,error}=await qy;if(error)throw error;return data||[];}
   async function transitionCompetition(id,status,reason){const{data,error}=await c().rpc('transition_competition',{p_competition_id:id,p_to_status:status,p_reason:reason||null});if(error)throw error;return data;}
   async function saveCompetition(payload,id=null){return save('competitions',payload,id);}
   async function listLevels(id){return q('competition_levels','*',qy=>qy.eq('competition_id',id).order('created_at'));}
@@ -40,8 +40,18 @@
   async function moderatePost(id,status){return save('posts',{status,updated_at:new Date().toISOString()},id);}
   async function moderateComment(id,moderation_state){return save('comments',{moderation_state,updated_at:new Date().toISOString()},id);}
   async function moderateQuestion(id,status){return save('questions',{status,updated_at:new Date().toISOString()},id);}
-  async function listPlans(){return q('organizer_plans','*',qy=>qy.order('created_at',{ascending:false}));}
-  async function listPlanCatalog(){return q('plan_catalog','*',qy=>qy.order('sort_order',{ascending:true}));}
+  async function listPlans({organizerId=null}={}){return q('organizer_plans','*',qy=>{if(organizerId)qy=qy.eq('organizer_id',organizerId);return qy.order('created_at',{ascending:false});});}
+  async function listActiveOrganizerPlan(organizerId){const rows=await listPlans({organizerId});return rows.find(x=>x.is_active)||null;}
+  async function getPendingOrganizerPlanOrder(organizerId){
+    const user=window.SYKA_STATE.getState().auth.user;
+    if(!user?.id || !organizerId) return null;
+    const {data,error}=await c().from('orders').select('*,order_items(*)').eq('user_id',user.id).eq('status','PENDING_PAYMENT').order('created_at',{ascending:false}).limit(20);
+    if(error)throw error;
+    return (data||[]).find(o=>(o.order_items||[]).some(i=>i.product_type==='PLAN' && i.metadata?.organizer_id===organizerId))||null;
+  }
+  async function listPlanCatalog(){return q('plan_catalog','*',qy=>qy.eq('is_active',true).order('sort_order',{ascending:true}));}
+  async function chooseOrganizerPlan(organizerId,planCode){const{data,error}=await c().rpc('choose_organizer_plan',{p_organizer_id:organizerId,p_plan_code:planCode});if(error)throw error;return data;}
+  async function assignOrganizerPlan(organizerId,planCode,startsAt=null,endsAt=null){const{data,error}=await c().rpc('admin_assign_organizer_plan',{p_organizer_id:organizerId,p_plan_code:planCode,p_starts_at:startsAt,p_ends_at:endsAt});if(error)throw error;return data;}
   async function listEntitlements(){return q('plan_entitlements','*',qy=>qy.order('plan_code'));}
   async function saveEntitlement(payload,id=null){return save('plan_entitlements',payload,id);}
   async function deleteEntitlement(planCode,capability){const{error}=await c().from('plan_entitlements').delete().eq('plan_code',planCode).eq('capability',capability);if(error)throw error;}
@@ -59,5 +69,5 @@
   async function listSlides({admin=false}={}){let qy=c().from('home_slides').select('*').order('sort_order',{ascending:true}).order('created_at',{ascending:false});if(!admin){const now=new Date().toISOString();qy=qy.eq('is_active',true).or(`starts_at.is.null,starts_at.lte.${now}`).or(`ends_at.is.null,ends_at.gte.${now}`);}const{data,error}=await qy;if(error)throw error;return data||[];}
   async function saveSlide(payload,id=null){return save('home_slides',payload,id);}
   async function deleteSlide(id){const{error}=await c().from('home_slides').delete().eq('id',id);if(error)throw error;}
-  window.SYKA_CONTROL_SERVICE={platformStats,listUsers,setUserStatus,setUserRole,listOrganizers,listMyOrganizerMemberships,listCompetitionsAdmin,transitionCompetition,saveCompetition,listLevels,saveLevel,getRegistrationRules,saveRegistrationRules,listRewards,saveReward,listQuestionBanks,saveQuestionBank,listQuestions,saveQuestion,listOptions,replaceOptions,listRegistrations,reviewRegistration,listAttempts,listGradingItems,saveGrade,finalizeAttempt,listAwards,listCertificates,updateCertificate,listOrders,updateOrder,listTwibbonTemplates,saveTwibbonTemplate,listModeration,moderatePost,moderateComment,moderateQuestion,listPlans,listPlanCatalog,listEntitlements,saveEntitlement,deleteEntitlement,savePlanBundle,listCommerceProducts,listCommerceBenefits,saveCommerceProduct,deleteCommerceProduct,replaceCommerceBenefits,listFlags,setFlag,listSettings,setSetting,listAudit,listSlides,saveSlide,deleteSlide};
+  window.SYKA_CONTROL_SERVICE={platformStats,listUsers,setUserStatus,setUserRole,listOrganizers,listMyOrganizerMemberships,listCompetitionsAdmin,transitionCompetition,saveCompetition,listLevels,saveLevel,getRegistrationRules,saveRegistrationRules,listRewards,saveReward,listQuestionBanks,saveQuestionBank,listQuestions,saveQuestion,listOptions,replaceOptions,listRegistrations,reviewRegistration,listAttempts,listGradingItems,saveGrade,finalizeAttempt,listAwards,listCertificates,updateCertificate,listOrders,updateOrder,listTwibbonTemplates,saveTwibbonTemplate,listModeration,moderatePost,moderateComment,moderateQuestion,listPlans,listActiveOrganizerPlan,getPendingOrganizerPlanOrder,chooseOrganizerPlan,assignOrganizerPlan,listPlanCatalog,listEntitlements,saveEntitlement,deleteEntitlement,savePlanBundle,listCommerceProducts,listCommerceBenefits,saveCommerceProduct,deleteCommerceProduct,replaceCommerceBenefits,listFlags,setFlag,listSettings,setSetting,listAudit,listSlides,saveSlide,deleteSlide};
 })();

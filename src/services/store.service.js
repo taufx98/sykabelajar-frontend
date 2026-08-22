@@ -32,8 +32,8 @@
     return data||[];
   }
 
-  async function createProductOrder(productId,quantity=1){
-    const {data,error}=await client().rpc('create_product_order',{p_product_id:productId,p_quantity:Math.max(1,Number(quantity)||1)});
+  async function createProductOrder(productId,quantity=1,meta={}){
+    const {data,error}=await client().rpc('create_product_order_with_proof',{p_product_id:productId,p_quantity:Math.max(1,Number(quantity)||1),p_whatsapp:meta.whatsapp||null,p_payment_method:meta.payment_method||'MANUAL_TRANSFER',p_proof_url:meta.proof_url||null,p_proof_public_id:meta.proof_public_id||null,p_proof_width:meta.proof_width||null,p_proof_height:meta.proof_height||null,p_proof_version:meta.proof_version||null,p_proof_resource_type:meta.proof_resource_type||null});
     if(error)throw error;
     return data;
   }

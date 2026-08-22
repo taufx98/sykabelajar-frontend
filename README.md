@@ -1,29 +1,39 @@
-# Sykabelajar Frontend v4.4 — Production Polish
+# Sykabelajar Frontend v4.6.1 — Production Polish
 
-Frontend Blogger SPA untuk sykabelajar.id yang tetap mengikuti RPD v4.1:
+Baseline frontend for `sykabelajar.id` using Blogger as the application shell, Supabase as source of truth, and Cloudinary for media.
 
-- Blogger = application shell + CMS/SEO
-- Supabase = Auth + PostgreSQL + RLS + RPC source of truth
-- Cloudinary = media layer
-- Edge Functions = secret/privileged operations
-- GitHub + GitHub Actions + jsDelivr = versioned frontend build pipeline
+## Included
+- Student / Teacher / Organizer account onboarding
+- Supabase Auth session recovery + SPA routing
+- Profile UX + Cloudinary avatar
+- Competition catalog/detail polish + Cloudinary poster upload
+- Organizer package selection before workspace control plane
+- FREE activation + Premium/Pro manual-transfer proof workflow
+- Admin plan builder with checkbox capabilities and organizer plan assignment
+- Admin/Organizer control planes
+- Store for Student / Teacher / Organizer products, Koin Edu, feature unlocks, digital items, donations
+- Manual payment proof uploaded to Cloudinary
+- Competition / promo / product / twibbon media upload via Cloudinary; no image URL entry in UI
+- Fingerprinted build + GitHub Actions + stable manifest-driven loader
 
-## Fokus v4.4
+## Repository
+GitHub: `taufx98/sykabelajar-frontend`
 
-- Auth bootstrap menunggu session recovery sebelum route pertama dirender.
-- `/p/app.html` menjadi route `/` ketika tidak ada `?route=`.
-- Legacy `?tab=` alias dipetakan ke route canonical.
-- Admin dan Organizer menggunakan query tab yang canonical: `?route=/admin&tab=users`.
-- State transition hanya menawarkan target valid dari state saat ini.
-- Profile UI diperhalus, termasuk avatar, tanggal lahir, sekolah autocomplete, dan light mode.
-- Competition forms memakai `datetime-local` yang lebih nyaman untuk tanggal + jam.
-- Home hero statistics dan promo slides tetap membaca Supabase.
-- Registration memakai RPC `register_for_competition`.
-- Leaderboard tetap menunjukkan desain Top 50 sambil read model final diaktifkan.
-- Empty/error/loading state dibuat eksplisit; tidak ada blank page untuk error aplikasi.
+Replace the repository contents with this package. The workflow in `.github/workflows/build-and-publish.yml` builds fingerprinted assets and publishes `dist/` to `main`.
 
-## Deployment
+## Blogger
+Keep the currently working stable theme. `App.html` remains:
 
-Blogger theme tetap menggunakan stable loader / manifest pipeline. Setelah source di-push ke `main`, GitHub Actions membangun asset fingerprint dan memperbarui `dist/manifest.json`.
+```html
+<div id="sykabelajar-app-page-host" aria-hidden="true"></div>
+```
 
-Tidak ada secret server-side di frontend.
+Do not add another loader script.
+
+## Supabase
+Run backend migrations 0005 and 0006 in order (0005 only when not already applied).
+
+## Security
+- Supabase publishable key may be bundled client-side, but RLS remains mandatory.
+- Never put service-role keys, Cloudinary API secrets, payment credentials, or webhook secrets in GitHub/frontend.
+- Paid plan/product benefits activate only after server-side/manual payment verification.
