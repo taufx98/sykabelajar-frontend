@@ -90,12 +90,30 @@
   }
   function initials(name) { return (String(name || 'U').trim().split(/\s+/).slice(0, 2).map(x => x[0]).join('') || 'U').toUpperCase(); }
   function debounce(fn, wait) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); }; }
+
   function routePath() {
     const url = new URL(window.location.href);
-    if (url.searchParams.get('route')) return url.searchParams.get('route');
-    if (window.location.hash && window.location.hash.startsWith('#/')) return window.location.hash.slice(1);
+    const configuredAppPage = window.SYKA_CONFIG?.APP_PAGE || '/p/app.html';
+
+    // Application routes are carried by ?route=...
+    const route = url.searchParams.get('route');
+    if (route) return route;
+
+    // Hash routing compatibility.
+    if (window.location.hash && window.location.hash.startsWith('#/')) {
+      return window.location.hash.slice(1);
+    }
+
+    // IMPORTANT: the Blogger application page itself is the home surface
+    // when there is no explicit ?route=. Without this, /p/app.html
+    // becomes an unknown route and the app shows "Halaman tidak ditemukan".
+    if (url.pathname === configuredAppPage) {
+      return '/';
+    }
+
     return url.pathname || '/';
   }
+
   function queryParams() {
     const url = new URL(window.location.href);
     const params = Object.fromEntries(url.searchParams.entries());
@@ -118,8 +136,6 @@
   function safeJson(value, fallback = null) { try { return JSON.parse(value); } catch (_) { return fallback; } }
   window.SYKA_UTILS = { escapeHtml, formatDate, initials, debounce, routePath, queryParams, randomId, cloudinaryTransform, getStoredTheme, safeJson };
 })();
-
-
 
 
 /* src/lib/supabase.js */
