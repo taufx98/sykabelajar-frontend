@@ -62,11 +62,31 @@
     const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
     const y0=new Date().getFullYear();
     const years=Array.from({length:11},(_,i)=>y0-3+i);
-    const days=Array.from({length:31},(_,i)=>i+1);
+    const maxDay=new Date(p.year,p.month,0).getDate();
+    const days=Array.from({length:maxDay},(_,i)=>i+1);
     const hours=Array.from({length:24},(_,i)=>i);
-    const minutes=[0,15,30,45];
-    const opts=(items,current,labeler=x=>String(x))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
-    return `<label class="datetime-field">${label}${required?' *':''}<div class="datetime-dropdown-grid" data-datetime-field="${id}"><select data-dt-day="${id}" aria-label="${label} tanggal">${opts(days,p.day,x=>String(x).padStart(2,'0'))}</select><select data-dt-month="${id}" aria-label="${label} bulan">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select><select data-dt-year="${id}" aria-label="${label} tahun">${opts(years,p.year)}</select><span class="datetime-separator">pukul</span><select data-dt-hour="${id}" aria-label="${label} jam">${opts(hours,p.hour,x=>String(x).padStart(2,'0'))}</select><span class="datetime-colon">:</span><select data-dt-minute="${id}" aria-label="${label} menit">${opts(minutes,p.minute,x=>String(x).padStart(2,'0'))}</select></div></label>`;
+    const minutes=Array.from({length:12},(_,i)=>i*5);
+    const options=(items,current,labeler=x=>String(x).padStart(2,'0'))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
+    return `<div class="schedule-field" data-schedule-field="${id}">
+      <div class="schedule-field-label">${label}${required?' *':''}</div>
+      <div class="schedule-trigger-row">
+        <button type="button" class="schedule-trigger" data-schedule-open="${id}"><span class="schedule-trigger-icon">▣</span><span data-schedule-date-text></span><span class="schedule-chevron">⌄</span></button>
+        <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text></span><span class="schedule-chevron">⌄</span></button>
+      </div>
+      <div class="schedule-popover" data-schedule-popover="${id}">
+        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div></div>
+        <div class="schedule-popover-section"><span class="schedule-section-title">Tanggal</span><div class="schedule-select-grid">
+          <label>Hari<select data-dt-day="${id}">${options(days,p.day)}</select></label>
+          <label>Bulan<select data-dt-month="${id}">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select></label>
+          <label>Tahun<select data-dt-year="${id}">${options(years,p.year,x=>String(x))}</select></label>
+        </div></div>
+        <div class="schedule-popover-section"><span class="schedule-section-title">Waktu</span><div class="schedule-select-grid schedule-time-grid">
+          <label>Jam<select data-dt-hour="${id}">${options(hours,p.hour)}</select></label>
+          <label>Menit<select data-dt-minute="${id}">${options(minutes,p.minute)}</select></label>
+        </div></div>
+        <div class="schedule-popover-footer"><span>Waktu lokal perangkat</span><button type="button" class="btn btn-primary btn-sm" data-schedule-done>Selesai</button></div>
+      </div>
+    </div>`;
   }
 
   async function competitionModal(current=null){

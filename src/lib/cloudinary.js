@@ -54,5 +54,27 @@
   const openPaymentProofWidget=(s,e)=>openImageWidget({folder:'sykabelajar/orders/payment-proofs',maxFileSize:8000000,crop:false},s,e);
   const openTwibbonWidget=(s,e)=>openImageWidget({folder:'sykabelajar/competitions/twibbon',maxFileSize:10000000,crop:true,croppingAspectRatio:1},s,e);
 
-  window.SYKA_CLOUDINARY={openImageWidget,openAvatarWidget,openCompetitionImageWidget,openPromoImageWidget,openProductImageWidget,openPaymentProofWidget,openTwibbonWidget};
+  async function uploadFile(file, options={}) {
+    if (!(file instanceof File)) throw new Error('File gambar belum dipilih.');
+    const cfg = window.SYKA_CONFIG || {};
+    const cloudName = cfg.CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = cfg.CLOUDINARY_UPLOAD_PRESET;
+    if (!cloudName || !uploadPreset) throw new Error('Konfigurasi Cloudinary belum tersedia.');
+    if (file.size > (options.maxFileSize || 10000000)) throw new Error('Ukuran file terlalu besar.');
+    const allowed = options.formats || ['png','jpg','jpeg','webp'];
+    const ext = String(file.name.split('.').pop() || '').toLowerCase();
+    if (ext && !allowed.includes(ext)) throw new Error('Format gambar harus PNG, JPG, JPEG, atau WEBP.');
+    const resourceType = options.resourceType || 'image';
+    const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${resourceType}/upload`;
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', uploadPreset);
+    if (options.folder) form.append('folder', options.folder);
+    const res = await fetch(endpoint, { method:'POST', body:form });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok || !data.secure_url) throw new Error(data.error?.message || 'Upload Cloudinary gagal.');
+    return normalizeInfo(data);
+  }
+
+  window.SYKA_CLOUDINARY={openImageWidget,openAvatarWidget,openCompetitionImageWidget,openPromoImageWidget,openProductImageWidget,openPaymentProofWidget,openTwibbonWidget,uploadFile};
 })();

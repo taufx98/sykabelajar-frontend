@@ -116,17 +116,82 @@
     const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
     const y0=new Date().getFullYear();
     const years=Array.from({length:11},(_,i)=>y0-3+i);
-    const days=Array.from({length:31},(_,i)=>i+1);
+    const maxDay=new Date(p.year,p.month,0).getDate();
+    const days=Array.from({length:maxDay},(_,i)=>i+1);
     const hours=Array.from({length:24},(_,i)=>i);
-    const minutes=[0,15,30,45];
-    const opts=(items,current,labeler=x=>String(x))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
-    return `<label class="datetime-field">${label}${required?' *':''}<div class="datetime-dropdown-grid" data-datetime-field="${id}"><select data-dt-day="${id}" aria-label="${label} tanggal">${opts(days,p.day,x=>String(x).padStart(2,'0'))}</select><select data-dt-month="${id}" aria-label="${label} bulan">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select><select data-dt-year="${id}" aria-label="${label} tahun">${opts(years,p.year)}</select><span class="datetime-separator">pukul</span><select data-dt-hour="${id}" aria-label="${label} jam">${opts(hours,p.hour,x=>String(x).padStart(2,'0'))}</select><span class="datetime-colon">:</span><select data-dt-minute="${id}" aria-label="${label} menit">${opts(minutes,p.minute,x=>String(x).padStart(2,'0'))}</select></div></label>`;
+    const minutes=Array.from({length:12},(_,i)=>i*5);
+    const options=(items,current,labeler=x=>String(x).padStart(2,'0'))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
+    return `<div class="schedule-field" data-schedule-field="${id}">
+      <div class="schedule-field-label">${label}${required?' *':''}</div>
+      <div class="schedule-trigger-row">
+        <button type="button" class="schedule-trigger" data-schedule-open="${id}"><span class="schedule-trigger-icon">▣</span><span data-schedule-date-text></span><span class="schedule-chevron">⌄</span></button>
+        <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text></span><span class="schedule-chevron">⌄</span></button>
+      </div>
+      <div class="schedule-popover" data-schedule-popover="${id}">
+        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div></div>
+        <div class="schedule-popover-section"><span class="schedule-section-title">Tanggal</span><div class="schedule-select-grid">
+          <label>Hari<select data-dt-day="${id}">${options(days,p.day)}</select></label>
+          <label>Bulan<select data-dt-month="${id}">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select></label>
+          <label>Tahun<select data-dt-year="${id}">${options(years,p.year,x=>String(x))}</select></label>
+        </div></div>
+        <div class="schedule-popover-section"><span class="schedule-section-title">Waktu</span><div class="schedule-select-grid schedule-time-grid">
+          <label>Jam<select data-dt-hour="${id}">${options(hours,p.hour)}</select></label>
+          <label>Menit<select data-dt-minute="${id}">${options(minutes,p.minute)}</select></label>
+        </div></div>
+        <div class="schedule-popover-footer"><span>Waktu lokal perangkat</span><button type="button" class="btn btn-primary btn-sm" data-schedule-done>Selesai</button></div>
+      </div>
+    </div>`;
   }
 
   async function competitionModal(orgId,current=null){
     const p=current||{};
-    window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card"><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gunakan Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="org-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="org-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div><div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2></div></div><div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ann','Pengumuman',p.announcement_at,false)}<div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div></form>`,onOpen:b=>{b.querySelector('#org-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();if(!info?.secure_url)throw new Error('Cloudinary tidak mengembalikan file poster.');b.querySelector('#poster').value=info.secure_url||'';b.querySelector('#poster-public-id').value=info.public_id||'';b.querySelector('#poster-width').value=info.width||'';b.querySelector('#poster-height').value=info.height||'';b.querySelector('#poster-version').value=info.version||'';b.querySelector('#poster-resource').value=info.resource_type||'image';b.querySelector('#org-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster')}</strong></div>`;b.querySelector('#org-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};b.querySelector('#ocf').onsubmit=async e=>{e.preventDefault();try{const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:b.querySelector('#poster').value.trim()||null,poster_public_id:b.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(b.querySelector('#poster-width').value)||null,poster_height:Number(b.querySelector('#poster-height').value)||null,poster_version:b.querySelector('#poster-version').value.trim()||null,poster_resource_type:b.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.readDateTimeField('rs', b),registration_ends_at:window.SYKA_UTILS.readDateTimeField('re', b),starts_at:window.SYKA_UTILS.readDateTimeField('start', b),ends_at:window.SYKA_UTILS.readDateTimeField('end', b),announcement_at:window.SYKA_UTILS.readDateTimeField('ann', b)};await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#oc-feedback').innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};}});
+    let pendingPosterFile=null;
+    let pendingPosterUrl=null;
+    window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="ocf" class="form-card">
+      <div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"></label></div>
+      <div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div>
+      <label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi…">${esc(p.short_description||'')}</textarea></label>
+      <div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>File tetap di perangkat sampai kamu menekan Simpan/Buat Draft.</p></div><div class="upload-preview" id="org-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan di server</strong><small>Belum ada perubahan lokal</small></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="org-poster-upload">${p.poster_url?'Pilih poster baru':'Pilih poster'}</button><input type="file" id="org-poster-file" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Jadwal kompetisi</h2><p>Atur tanggal dan waktu dengan picker bergaya scheduler.</p></div></div>
+      <div class="form-grid-2">${dateField('rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('re','Pendaftaran berakhir',p.registration_ends_at,true)}</div>
+      <div class="form-grid-2">${dateField('start','Kompetisi mulai',p.starts_at,true)}${dateField('end','Kompetisi berakhir',p.ends_at,true)}</div>
+      ${dateField('ann','Pengumuman',p.announcement_at,false)}
+      <div id="oc-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary" id="org-comp-submit">${current?'Simpan perubahan':'Buat sebagai DRAFT'}</button></div>
+    </form>`,onOpen:b=>{
+      window.SYKA_UTILS.bindSchedulePickers(b);
+      const fileInput=b.querySelector('#org-poster-file');
+      const uploadBtn=b.querySelector('#org-poster-upload');
+      const preview=b.querySelector('#org-poster-preview');
+      uploadBtn.onclick=()=>fileInput.click();
+      fileInput.onchange=()=>{
+        const file=fileInput.files?.[0];
+        if(!file)return;
+        if(file.size>10000000){fileInput.value='';window.SYKA_TOAST.show('Ukuran poster maksimal 10 MB.','error');return;}
+        if(!['image/png','image/jpeg','image/webp'].includes(file.type)){fileInput.value='';window.SYKA_TOAST.show('Gunakan PNG, JPG, atau WEBP.','error');return;}
+        pendingPosterFile=file;
+        if(pendingPosterUrl)URL.revokeObjectURL(pendingPosterUrl);
+        pendingPosterUrl=URL.createObjectURL(file);
+        preview.innerHTML=`<img src="${pendingPosterUrl}" alt="Poster baru"><div class="upload-file-meta"><strong>${esc(file.name)}</strong><small>Siap diupload saat disimpan · belum dikirim ke server</small></div>`;
+        uploadBtn.textContent='Ganti poster';
+      };
+      b.querySelector('#ocf').onsubmit=async e=>{
+        e.preventDefault();
+        const btn=b.querySelector('#org-comp-submit');
+        const feedback=b.querySelector('#oc-feedback');
+        btn.disabled=true;
+        try{
+          let media=p.poster_url?{secure_url:p.poster_url,public_id:p.poster_public_id||'',width:p.poster_width||null,height:p.poster_height||null,version:p.poster_version||'',resource_type:p.poster_resource_type||'image'}:null;
+          if(pendingPosterFile){btn.innerHTML='<span class="spinner"></span> Mengunggah poster…';media=await window.SYKA_CLOUDINARY.uploadFile(pendingPosterFile,{folder:'sykabelajar/competitions/posters',maxFileSize:10000000});}
+          btn.innerHTML='<span class="spinner"></span> Menyimpan…';
+          const payload={organizer_id:orgId,title:b.querySelector('#title').value.trim(),slug:b.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:b.querySelector('#category').value.trim()||'Kompetisi',short_description:b.querySelector('#short').value.trim()||null,visibility:b.querySelector('#visibility').value,poster_url:media?.secure_url||null,poster_public_id:media?.public_id||null,poster_width:media?.width||null,poster_height:media?.height||null,poster_version:media?.version||null,poster_resource_type:media?.resource_type||'image',registration_starts_at:window.SYKA_UTILS.readDateTimeField('rs',b),registration_ends_at:window.SYKA_UTILS.readDateTimeField('re',b),starts_at:window.SYKA_UTILS.readDateTimeField('start',b),ends_at:window.SYKA_UTILS.readDateTimeField('end',b),announcement_at:window.SYKA_UTILS.readDateTimeField('ann',b)};
+          await svc().saveCompetition(payload,current?.id||null);
+          if(pendingPosterUrl)URL.revokeObjectURL(pendingPosterUrl);
+          window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();
+        }catch(error){btn.disabled=false;btn.textContent=current?'Simpan perubahan':'Buat sebagai DRAFT';feedback.innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}
+      };
+    }});
   }
+
   function transitionModal(c){const choices=transitions[c.status]||[];if(!choices.length){window.SYKA_TOAST.show(`Tidak ada transisi valid dari ${c.status}.`,'warning');return;}window.SYKA_MODAL.open({title:'Ubah status kompetisi',html:`<div class="transition-current"><span>STATUS SAAT INI</span><strong>${esc(c.status)}</strong></div><form id="otf" class="form-card"><label>Status tujuan<select id="target">${choices.map(s=>`<option>${s}</option>`).join('')}</select></label><label>Alasan<textarea id="reason" placeholder="Mengapa status ini diubah?"></textarea></label><button class="btn btn-primary btn-block">Terapkan</button><div class="form-hint">Backend akan memvalidasi lifecycle dan mencatat audit.</div></form>`,onOpen:b=>b.querySelector('#otf').onsubmit=async e=>{e.preventDefault();try{await svc().transitionCompetition(c.id,b.querySelector('#target').value,b.querySelector('#reason').value.trim()||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Status kompetisi diperbarui.','success');window.SYKA_ROUTER.refresh();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});}
   function configModal(c){window.SYKA_MODAL.open({title:`Config · ${c.title}`,html:`<div class="config-grid"><button class="config-card" id="lvl"><span>◫</span><strong>Jenjang</strong><small>Grade, points, level kompetisi.</small></button><button class="config-card" id="rules"><span>◌</span><strong>Registrasi</strong><small>Eligibility, twibbon, quota.</small></button><button class="config-card" id="reward"><span>✦</span><strong>Reward</strong><small>Juara, poin, emblem.</small></button></div>`,onOpen:b=>{b.querySelector('#lvl').onclick=()=>levelModal(c.id);b.querySelector('#rules').onclick=()=>rulesModal(c.id);b.querySelector('#reward').onclick=()=>rewardModal(c.id);}});}
   async function levelModal(id){
