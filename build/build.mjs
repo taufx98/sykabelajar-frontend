@@ -101,7 +101,7 @@ writeFileSync(resolve(dist, 'loader.js'), loader);
 // Single source of truth for release asset names.
 const manifest = {
   schema: 2,
-  version: '4.6.6',
+  version: '4.7.0',
   repo: REPO,
   base: CDN_BASE,
   app: appFile,

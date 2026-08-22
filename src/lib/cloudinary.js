@@ -61,9 +61,9 @@
     const uploadPreset = cfg.CLOUDINARY_UPLOAD_PRESET;
     if (!cloudName || !uploadPreset) throw new Error('Konfigurasi Cloudinary belum tersedia.');
     if (file.size > (options.maxFileSize || 10000000)) throw new Error('Ukuran file terlalu besar.');
-    const allowed = options.formats || ['png','jpg','jpeg','webp'];
+    const allowed = options.formats || (resourceType==='raw' ? ['pdf'] : ['png','jpg','jpeg','webp']);
     const ext = String(file.name.split('.').pop() || '').toLowerCase();
-    if (ext && !allowed.includes(ext)) throw new Error('Format gambar harus PNG, JPG, JPEG, atau WEBP.');
+    if (ext && !allowed.includes(ext)) throw new Error(resourceType==='raw'?'Format file yang didukung hanya PDF.':'Format gambar harus PNG, JPG, JPEG, atau WEBP.');
     const resourceType = options.resourceType || 'image';
     const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${resourceType}/upload`;
     const form = new FormData();
@@ -76,5 +76,6 @@
     return normalizeInfo(data);
   }
 
-  window.SYKA_CLOUDINARY={openImageWidget,openAvatarWidget,openCompetitionImageWidget,openPromoImageWidget,openProductImageWidget,openPaymentProofWidget,openTwibbonWidget,uploadFile};
+    async function uploadDocumentFile(file,options={}){return uploadFile(file,{...options,resourceType:'raw',formats:['pdf'],maxFileSize:options.maxFileSize||15000000});}
+  window.SYKA_CLOUDINARY={openImageWidget,openAvatarWidget,openCompetitionImageWidget,openPromoImageWidget,openProductImageWidget,openPaymentProofWidget,openTwibbonWidget,uploadFile,uploadDocumentFile};
 })();
