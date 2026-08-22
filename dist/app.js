@@ -1048,65 +1048,217 @@ window.SYKA_PAGE_VERIFY={render};})();
   function toggleSidebar(){document.body.classList.toggle('sidebar-collapsed');localStorage.setItem('syka_sidebar',document.body.classList.contains('sidebar-collapsed')?'0':'1');}
   function toggleMobileNav(){document.body.classList.toggle('mobile-nav-open');}
   function bindInternalNavigation(){
-    if(window.__SYKA_INTERNAL_NAV_BOUND) return;
-    window.__SYKA_INTERNAL_NAV_BOUND=true;
-    document.addEventListener('click',(e)=>{
-      const link=e.target.closest?.('a[href]');
-      if(!link) return;
-      if(e.defaultPrevented || e.button!==0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const raw=link.getAttribute('href');
-      if(!raw || raw.startsWith('#') || raw.startsWith('mailto:') || raw.startsWith('tel:')) return;
-      try{
-        const u=new URL(raw, window.location.href);
-        const cfg=window.SYKA_CONFIG;
-        if(u.origin!==window.location.origin) return;
-        if(cfg.ROUTE_MODE==='query' && u.pathname===cfg.APP_PAGE && u.searchParams.has('route')){
-          e.preventDefault();
-          const route=u.searchParams.get('route') || '/';
-          window.SYKA_ROUTER.navigate(route);
+  if(window.__SYKA_INTERNAL_NAV_BOUND) return;
+
+  window.__SYKA_INTERNAL_NAV_BOUND = true;
+
+  document.addEventListener('click',(e)=>{
+    const link = e.target.closest?.('a[href]');
+
+    if(!link) return;
+
+    if(
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    ){
+      return;
+    }
+
+    const raw = link.getAttribute('href');
+
+    if(
+      !raw ||
+      raw.startsWith('#') ||
+      raw.startsWith('mailto:') ||
+      raw.startsWith('tel:')
+    ){
+      return;
+    }
+
+    try{
+      const u = new URL(raw, window.location.href);
+      const cfg = window.SYKA_CONFIG || {};
+
+      /*
+       * Only intercept same-origin application navigation.
+       */
+      if(u.origin !== window.location.origin){
+        return;
+      }
+
+      if(
+        cfg.ROUTE_MODE === 'query' &&
+        u.pathname === cfg.APP_PAGE
+      ){
+        e.preventDefault();
+
+        /*
+         * Canonical route.
+         */
+        const explicitRoute =
+          u.searchParams.get('route');
+
+        if(explicitRoute){
+          window.SYKA_ROUTER.navigate(
+            explicitRoute || '/'
+          );
+          return;
         }
-      }catch(_){}
-    });
-  }
+
+        /*
+         * Legacy tab compatibility.
+         */
+        const tab =
+          (u.searchParams.get('tab') || '').toLowerCase();
+
+        const aliases = {
+          competitions: '/lomba',
+          competition: '/lomba',
+          lomba: '/lomba',
+
+          ranking: '/juara',
+          leaderboard: '/juara',
+          juara: '/juara',
+
+          awards: '/prestasi',
+          achievement: '/prestasi',
+          prestasi: '/prestasi',
+
+          profile: '/profile',
+          profil: '/profile',
+
+          orders: '/pesanan',
+          order: '/pesanan',
+          pesanan: '/pesanan',
+
+          organizer: '/organizer',
+          penyelenggara: '/organizer',
+
+          admin: '/admin'
+        };
+
+        window.SYKA_ROUTER.navigate(
+          aliases[tab] || '/'
+        );
+      }
+
+    }catch(_){}
+  });
+}
   function init(){
   if(window.__SYKA_APP_INITIALIZED) return;
-  window.__SYKA_APP_INITIALIZED=true;
 
+  window.__SYKA_APP_INITIALIZED = true;
+
+  /*
+   * Bind SPA navigation first.
+   */
   bindInternalNavigation();
 
-  const theme=window.SYKA_UTILS.getStoredTheme();
+  /*
+   * Restore UI preference.
+   */
+  const theme = window.SYKA_UTILS.getStoredTheme();
   setTheme(theme);
 
-  if(localStorage.getItem('syka_sidebar')==='0'){
-    document.body.classList.add('sidebar-collapsed');
+  if(
+    localStorage.getItem('syka_sidebar') === '0'
+  ){
+    document.body.classList.add(
+      'sidebar-collapsed'
+    );
   }
 
+  /*
+   * Render shell.
+   */
   window.SYKA_SIDEBAR.render();
   window.SYKA_HEADER.render();
   window.SYKA_BOTTOMNAV.render();
 
-  window.__SYKA_AUTH_UI_UNSUB=window.SYKA_STATE.subscribe((state,path)=>{
-    if(path && path.startsWith('auth.')) refreshAuthChrome();
-  });
+  /*
+   * Auth state changes refresh the shell.
+   */
+  window.__SYKA_AUTH_UI_UNSUB =
+    window.SYKA_STATE.subscribe((state,path)=>{
+      if(
+        path &&
+        path.startsWith('auth.')
+      ){
+        refreshAuthChrome();
+      }
+    });
 
-  document.getElementById('mobile-nav-overlay')?.addEventListener('click',toggleMobileNav);
+  /*
+   * Mobile navigation overlay.
+   */
+  document
+    .getElementById('mobile-nav-overlay')
+    ?.addEventListener(
+      'click',
+      toggleMobileNav
+    );
 
-  window.addEventListener('online',()=>{
-    window.SYKA_STATE.patch('network.online',true);
-  });
+  /*
+   * Network state.
+   */
+  window.addEventListener(
+    'online',
+    ()=>{
+      window.SYKA_STATE.patch(
+        'network.online',
+        true
+      );
+    }
+  );
 
-  window.addEventListener('offline',()=>{
-    window.SYKA_STATE.patch('network.online',false);
-    window.SYKA_TOAST.show('Koneksi internet terputus.','warning');
-  });
+  window.addEventListener(
+    'offline',
+    ()=>{
+      window.SYKA_STATE.patch(
+        'network.online',
+        false
+      );
 
-  // IMPORTANT:
-  // Do NOT render a protected route before the Supabase session has been restored.
-  // bootstrapAuth() restores the persisted session, profile and roles first.
-  // Only then do we resolve/render the current application route.
+      window.SYKA_TOAST.show(
+        'Koneksi internet terputus.',
+        'warning'
+      );
+    }
+  );
+
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT render the current route before
+   * Supabase session restoration completes.
+   *
+   * Correct order:
+   *
+   * Supabase
+   *    ↓
+   * getSession()
+   *    ↓
+   * profile
+   *    ↓
+   * roles / permissions
+   *    ↓
+   * router.render()
+   *
+   * This prevents authenticated users from
+   * temporarily being treated as guests after
+   * refresh/deep-link.
+   */
   bootstrapAuth()
     .catch((error)=>{
-      console.error('[Sykabelajar] Auth bootstrap failed:', error);
+      console.error(
+        '[Sykabelajar] Auth bootstrap failed:',
+        error
+      );
     })
     .finally(()=>{
       window.SYKA_ROUTER.render();
