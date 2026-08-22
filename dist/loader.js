@@ -2,7 +2,7 @@
 (function(){
   if (window.__SYKA_LOADER_STARTED__) return;
   window.__SYKA_LOADER_STARTED__ = true;
-  const release = "68a16bce0a331cf564d4cd94ec61685a3d188922";
+  const release = "2064b6ec255035b4b4c580ca97bb5defc11210ae";
   const base = "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist";
   const files = {
     styles: "styles.8a6d38a345cb.min.css",
