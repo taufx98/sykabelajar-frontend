@@ -44,3 +44,10 @@ Run backend migrations 0005 and 0006 in order (0005 only when not already applie
 - Admin audit tab restored.
 - Utility functions required by control plane restored.
 - All source JavaScript syntax checked with `node --check`.
+
+
+## v4.6.6 UI polish
+- Role-aware Profile form with safe birth-date handling.
+- Competition detail CTA now follows competition lifecycle.
+- Leaderboard empty/podium states polished without fake participant initials.
+- Scheduler popovers are positioned above modal scroll containers and no longer clip.

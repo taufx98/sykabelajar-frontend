@@ -19,35 +19,67 @@
     if(!fields.length)return;
     const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
     const pad=n=>String(n).padStart(2,'0');
-    const closeAll=()=>fields.forEach(f=>f.classList.remove('open'));
+    const closeAll=()=>fields.forEach(f=>{
+      f.classList.remove('open');
+      const pop=f.querySelector('.schedule-popover');
+      if(pop){pop.style.left='';pop.style.top='';pop.style.width='';pop.style.maxHeight='';}
+    });
     function refresh(field){
       const id=field.dataset.scheduleField;
-      const y=Number(field.querySelector(`[data-dt-year="${id}"]`)?.value);
-      const m=Number(field.querySelector(`[data-dt-month="${id}"]`)?.value);
-      const d=Number(field.querySelector(`[data-dt-day="${id}"]`)?.value);
-      const h=Number(field.querySelector(`[data-dt-hour="${id}"]`)?.value);
-      const mi=Number(field.querySelector(`[data-dt-minute="${id}"]`)?.value);
+      const q=s=>field.querySelector(s)?.value;
+      const y=Number(q(`[data-dt-year="${id}"]`));
+      const m=Number(q(`[data-dt-month="${id}"]`));
+      const d=Number(q(`[data-dt-day="${id}"]`));
+      const h=Number(q(`[data-dt-hour="${id}"]`));
+      const mi=Number(q(`[data-dt-minute="${id}"]`));
       const max=daysInMonth(y,m);
       const day=field.querySelector(`[data-dt-day="${id}"]`);
       if(day){
-        const current=Math.min(d||1,max);
+        const current=Math.min(Math.max(d||1,1),max);
         day.innerHTML=Array.from({length:max},(_,i)=>`<option value="${i+1}">${pad(i+1)}</option>`).join('');
         day.value=String(current);
       }
       const dateText=field.querySelector('[data-schedule-date-text]');
       const timeText=field.querySelector('[data-schedule-time-text]');
-      if(dateText)dateText.textContent=`${pad(day?.value||d)} ${months[Math.max(0,m-1)].slice(0,3)} ${y}`;
+      if(dateText)dateText.textContent=`${pad(Number(day?.value||d||1))} ${months[Math.max(0,m-1)].slice(0,3)} ${y}`;
       if(timeText)timeText.textContent=`${pad(h)}:${pad(mi)}`;
+    }
+    function positionPopover(field){
+      const pop=field.querySelector('.schedule-popover');
+      const dateBtn=field.querySelector('[data-schedule-open]');
+      if(!pop||!dateBtn)return;
+      const rect=dateBtn.getBoundingClientRect();
+      const gutter=12;
+      const width=Math.min(430, Math.max(300, Math.min(430, window.innerWidth-gutter*2)));
+      let left=Math.min(rect.left, window.innerWidth-width-gutter);
+      left=Math.max(gutter,left);
+      const estimated=330;
+      let top=rect.bottom+8;
+      if(top+estimated>window.innerHeight-gutter && rect.top-estimated-8>gutter) top=rect.top-estimated-8;
+      pop.style.position='fixed';
+      pop.style.left=`${left}px`;
+      pop.style.top=`${Math.max(gutter,top)}px`;
+      pop.style.width=`${width}px`;
+      pop.style.maxHeight=`${Math.max(250,window.innerHeight-24)}px`;
+      pop.style.overflow='auto';
+      pop.style.zIndex='130';
     }
     fields.forEach(field=>{
       refresh(field);
       field.querySelectorAll('select').forEach(sel=>sel.addEventListener('change',()=>refresh(field)));
-      field.querySelectorAll('[data-schedule-open]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const was=field.classList.contains('open');closeAll();if(!was)field.classList.add('open');}));
-      field.querySelector('[data-schedule-done]')?.addEventListener('click',()=>field.classList.remove('open'));
+      field.querySelectorAll('[data-schedule-open]').forEach(btn=>btn.addEventListener('click',e=>{
+        e.preventDefault();e.stopPropagation();
+        const was=field.classList.contains('open');
+        closeAll();
+        if(!was){field.classList.add('open');requestAnimationFrame(()=>positionPopover(field));}
+      }));
+      field.querySelector('[data-schedule-done]')?.addEventListener('click',()=>closeAll());
     });
     if(!root.__SYKA_SCHEDULE_OUTSIDE){
       root.__SYKA_SCHEDULE_OUTSIDE=true;
-      document.addEventListener('click',e=>{if(!e.target.closest('.schedule-field'))closeAll();},{capture:true});
+      document.addEventListener('click',e=>{if(!e.target.closest('.schedule-field')&&!e.target.closest('.schedule-popover'))closeAll();},{capture:true});
+      window.addEventListener('resize',()=>fields.forEach(f=>f.classList.contains('open')&&positionPopover(f)));
+      window.addEventListener('scroll',()=>fields.forEach(f=>f.classList.contains('open')&&positionPopover(f)),{passive:true});
     }
   }
 
