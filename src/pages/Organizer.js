@@ -124,8 +124,8 @@
     return `<div class="schedule-field" data-schedule-field="${id}">
       <div class="schedule-field-label">${label}${required?' *':''}</div>
       <div class="schedule-trigger-row">
-        <button type="button" class="schedule-trigger" data-schedule-open="${id}"><span class="schedule-trigger-icon">▣</span><span data-schedule-date-text></span><span class="schedule-chevron">⌄</span></button>
-        <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text></span><span class="schedule-chevron">⌄</span></button>
+        <button type="button" class="schedule-trigger" data-schedule-open="${id}"><span class="schedule-trigger-icon">▣</span><span data-schedule-date-text>${String(p.day).padStart(2,'0')} ${months[p.month-1]?.slice(0,3)||''} ${p.year}</span><span class="schedule-chevron">⌄</span></button>
+        <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text>${String(p.hour).padStart(2,'0')}:${String(Math.floor((p.minute||0)/5)*5).padStart(2,'0')}</span><span class="schedule-chevron">⌄</span></button>
       </div>
       <div class="schedule-popover" data-schedule-popover="${id}">
         <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div></div>
@@ -248,22 +248,324 @@
     const render=async()=>{
       const bank=banks.find(x=>x.id===selectedBank);
       const list=selectedBank?await svc().listQuestions({bankId:selectedBank}):[];
-      root.innerHTML=`<div class="toolbar"><div><span class="eyebrow">QUESTION ENGINE</span><h2>Soal kompetisi</h2><p>Siapkan bank soal, buat pertanyaan, dan publikasi hanya untuk tahap LIVE.</p></div><div class="toolbar-actions"><button class="btn btn-secondary" id="import-questions">Import JSON/CSV</button><button class="btn btn-primary" id="new-question">+ Soal</button></div></div><section class="question-workspace-v47"><aside class="question-bank-sidebar-v47"><div class="sidebar-head"><strong>Bank soal</strong><button class="btn btn-ghost btn-xs" id="new-bank">+ Bank</button></div><div class="question-bank-list">${banks.map(b=>`<button class="question-bank-item ${b.id===selectedBank?'active':''}" data-bank="${b.id}"><strong>${esc(b.name)}</strong><small>${esc(b.status)} · ${esc(b.description||'')}</small></button>`).join('')||'<div class="empty-inline">Belum ada bank soal.</div>'}</div></aside><section class="question-editor-v47"><div class="question-editor-head"><div><span class="eyebrow">${esc(bank?.name||'Pilih bank soal')}</span><h3>${esc(bank?.description||'Buat bank soal untuk kompetisi.')}</h3></div><span class="status-pill ${window.SYKA_UTILS.statusClass(bank?.status||'DRAFT')}">${esc(bank?.status||'DRAFT')}</span></div><div class="question-list-v47">${list.map((q,i)=>`<article class="question-row-v47"><div class="question-number">${i+1}</div><div class="question-copy"><div class="question-meta"><span>${esc(q.type)}</span><span>${Number(q.points||0)} pts</span><span>${q.required?'Wajib':'Opsional'}</span><span>${esc(q.status)}</span></div><strong>${esc(q.prompt)}</strong><small>Urutan ${q.display_order}</small></div></article>`).join('')||'<div class="empty-inline">Belum ada soal di bank ini.</div>'}</div></section></section>`;
+      root.innerHTML=`<div class="toolbar"><div><span class="eyebrow">QUESTION ENGINE</span><h2>Soal kompetisi</h2><p>Siapkan bank soal, buat pertanyaan, dan publikasi hanya untuk tahap LIVE.</p></div><div class="toolbar-actions"><button class="btn btn-secondary" id="import-questions">Import JSON/CSV</button><button class="btn btn-primary" id="new-question">+ Soal</button></div></div><section class="question-workspace-v47"><aside class="question-bank-sidebar-v47"><div class="sidebar-head"><strong>Bank soal</strong><button class="btn btn-ghost btn-xs" id="new-bank">+ Bank</button></div><div class="question-bank-list">${banks.map(b=>`<button class="question-bank-item ${b.id===selectedBank?'active':''}" data-bank="${b.id}"><strong>${esc(b.name)}</strong><small>${esc(b.status)} · ${esc(b.description||'')}</small></button>`).join('')||'<div class="empty-inline">Belum ada bank soal.</div>'}</div></aside><section class="question-editor-v47"><div class="question-editor-head"><div><span class="eyebrow">${esc(bank?.name||'Pilih bank soal')}</span><h3>${esc(bank?.description||'Buat bank soal untuk kompetisi.')}</h3></div><span class="status-pill ${window.SYKA_UTILS.statusClass(bank?.status||'DRAFT')}">${esc(bank?.status||'DRAFT')}</span></div><div class="question-list-v47">${list.map((q,i)=>`<article class="question-row-v47"><div class="question-number">${i+1}</div><div class="question-copy"><div class="question-meta"><span>${esc(q.type)}</span><span>${Number(q.points||0)} pts</span><span>${q.required?'Wajib':'Opsional'}</span><span>${esc(q.status)}</span></div><strong>${esc(q.prompt)}</strong><small>Urutan ${q.display_order}</small></div><div class="row-actions question-row-actions-v47"><button type="button" class="btn btn-ghost btn-sm" data-edit-question="${q.id}">Edit</button></div></article>`).join('')||'<div class="empty-inline">Belum ada soal di bank ini.</div>'}</div></section></section>`;
       root.querySelectorAll('[data-bank]').forEach(b=>b.onclick=()=>{selectedBank=b.dataset.bank;render();});
       document.getElementById('new-bank').onclick=()=>window.SYKA_MODAL.open({title:'Bank soal baru',html:`<form id="bf" class="form-card"><label>Nama bank<input id="name" required></label><label>Deskripsi<textarea id="desc"></textarea></label><label>Status<select id="status"><option>DRAFT</option><option>REVIEW</option><option>PUBLISHED</option></select></label><button class="btn btn-primary">Simpan</button></form>`,onOpen:b=>b.querySelector('#bf').onsubmit=async e=>{e.preventDefault();try{const bank=await svc().saveQuestionBank({organizer_id:orgId,name:b.querySelector('#name').value.trim(),description:b.querySelector('#desc').value.trim()||null,status:b.querySelector('#status').value,config:{}});window.SYKA_MODAL.close();banks.push(bank);selectedBank=bank.id;render();}catch(error){b.insertAdjacentHTML('beforeend',`<div class="inline-error">${esc(error.message)}</div>`);}}});
       document.getElementById('new-question').onclick=()=>questionModal(selectedBank,comps);
       document.getElementById('import-questions').onclick=()=>importQuestionModal(selectedBank);
+      root.querySelectorAll('[data-edit-question]').forEach(btn=>btn.onclick=async()=>{
+        try{
+          const id=btn.dataset.editQuestion;
+          const q=list.find(item=>item.id===id);
+          if(!q) throw new Error('Soal tidak ditemukan.');
+          const options=await svc().listOptions(id);
+          questionModal(selectedBank,comps,{...q,options});
+        }catch(error){
+          window.SYKA_TOAST.show(error.message||'Soal gagal dibuka.','error');
+        }
+      });
     };
     await render();
   }
-  function questionModal(bankId,comps){
-    window.SYKA_MODAL.open({title:'Tambah soal',wide:true,html:`<form id="qf" class="form-card"><div class="form-grid-2"><label>Kompetisi<select id="competition"><option value="">Tidak terikat</option>${comps.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></label><label>Jenis<select id="type"><option value="multiple_choice">Pilihan ganda</option><option value="multiple_checkbox">Multiple checkbox</option><option value="true_false">Benar / Salah</option><option value="short_answer">Isian singkat</option><option value="essay">Essay</option><option value="file_upload">Upload file</option></select></label></div><label>Pertanyaan *<textarea id="prompt" rows="5" required></textarea></label><div class="form-grid-2"><label>Poin<input id="points" type="number" min="0" step="0.5" value="1"></label><label>Urutan<input id="order" type="number" min="0" value="0"></label></div><div id="options-zone"><div class="option-builder-v47"><span class="eyebrow">OPTIONS</span><div id="options-list"></div><button type="button" class="btn btn-secondary btn-sm" id="add-option">+ Opsi</button></div></div><label class="checkline"><input id="required" type="checkbox" checked> Wajib dijawab</label><button class="btn btn-primary">Simpan soal</button><div id="qf-feedback"></div></form>`,onOpen:b=>{
-      const type=b.querySelector('#type'), list=b.querySelector('#options-list');
-      function paintOptions(){if(!['multiple_choice','multiple_checkbox','true_false'].includes(type.value)){b.querySelector('#options-zone').innerHTML='';return;}if(!list.children.length){['A','B','C','D'].forEach((v)=>add(v,v=== 'A'));} }
-      function add(label='',correct=false){const row=document.createElement('div');row.className='option-row-v47';row.innerHTML=`<input data-label value="${esc(label)}" placeholder="Label"><input data-value value="${esc(label)}" placeholder="Value"><label><input data-correct type="checkbox" ${correct?'checked':''}> Benar</label><button type="button" class="btn btn-ghost btn-xs" data-remove>×</button>`;row.querySelector('[data-remove]').onclick=()=>row.remove();list.appendChild(row);}
-      b.querySelector('#add-option').onclick=()=>add('');type.onchange=paintOptions;paintOptions();
-      b.querySelector('#qf').onsubmit=async e=>{e.preventDefault();try{const options=[...b.querySelectorAll('.option-row-v47')].map((r,i)=>({label:r.querySelector('[data-label]').value.trim(),value:r.querySelector('[data-value]').value.trim(),is_correct:r.querySelector('[data-correct]').checked,display_order:i})).filter(x=>x.label);const q=await svc().saveQuestion({question_bank_id:bankId,competition_id:b.querySelector('#competition').value||null,type:type.value,prompt:b.querySelector('#prompt').value.trim(),points:Number(b.querySelector('#points').value||0),required:b.querySelector('#required').checked,display_order:Number(b.querySelector('#order').value||0),config:{}},null);if(options.length)await svc().replaceOptions(q.id,options);window.SYKA_MODAL.close();window.SYKA_TOAST.show('Soal tersimpan.','success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#qf-feedback').innerHTML=`<div class="inline-error">${esc(error.message)}</div>`;}};
-    }});
+  function questionModal(bankId, comps, existing=null){
+    const initial = existing || {};
+    const TYPES = {
+      multiple_choice: {
+        label:'Pilihan ganda',
+        description:'Satu jawaban benar dari beberapa pilihan.',
+        short:'Pilih satu jawaban yang paling tepat.',
+        supportsOptions:true,
+        optionMode:'single'
+      },
+      multiple_checkbox: {
+        label:'Pilihan majemuk',
+        description:'Satu atau lebih jawaban dapat benar.',
+        short:'Peserta dapat memilih lebih dari satu jawaban.',
+        supportsOptions:true,
+        optionMode:'multi'
+      },
+      true_false: {
+        label:'Benar / Salah',
+        description:'Pernyataan dengan dua pilihan jawaban.',
+        short:'Sistem menyediakan Benar dan Salah otomatis.',
+        supportsOptions:true,
+        optionMode:'single',
+        fixed:true
+      },
+      short_answer: {
+        label:'Isian singkat',
+        description:'Jawaban teks singkat dengan beberapa jawaban yang diterima.',
+        short:'Gunakan beberapa variasi jawaban bila diperlukan.',
+        supportsOptions:false
+      },
+      essay: {
+        label:'Essay',
+        description:'Jawaban panjang untuk dinilai manual oleh grader.',
+        short:'Tidak ada kunci otomatis; grader memberi skor dan feedback.',
+        supportsOptions:false
+      },
+      file_upload: {
+        label:'Upload file',
+        description:'Peserta mengirim file sebagai jawaban.',
+        short:'Tentukan format dan batas ukuran file.',
+        supportsOptions:false
+      }
+    };
+
+    const escAttr = value => esc(value == null ? '' : value).replace(/`/g,'&#96;');
+
+    const draft = {
+      competition_id: initial.competition_id || '',
+      type: initial.type || 'multiple_choice',
+      prompt: initial.prompt || '',
+      points: Number(initial.points ?? 1),
+      display_order: Number(initial.display_order ?? 0),
+      required: initial.required !== false,
+      options: Array.isArray(initial.options) ? initial.options.map(o=>({
+        label:o.label || '', value:o.value || '', is_correct:!!o.is_correct
+      })) : [],
+      accepted_answers: Array.isArray(initial.config?.accepted_answers) ? [...initial.config.accepted_answers] : [],
+      rubric: initial.config?.rubric || '',
+      file_config: {
+        allowed_mime: initial.config?.allowed_mime || 'pdf',
+        max_size_mb: Number(initial.config?.max_size_mb || 10),
+        file_required: initial.config?.file_required !== false
+      }
+    };
+
+    function normalizeOptionsForType(type){
+      if(type==='true_false'){
+        const existingTruth = draft.options.find(o=>String(o.value)==='true');
+        const existingFalse = draft.options.find(o=>String(o.value)==='false');
+        draft.options = [
+          {label:'Benar',value:'true',is_correct: existingTruth ? !!existingTruth.is_correct : true},
+          {label:'Salah',value:'false',is_correct: existingFalse ? !!existingFalse.is_correct : false}
+        ];
+        if(draft.options.filter(o=>o.is_correct).length !== 1) draft.options[0].is_correct = true, draft.options[1].is_correct = false;
+        return;
+      }
+      if(type==='multiple_choice' || type==='multiple_checkbox'){
+        if(!draft.options.length){
+          draft.options=[
+            {label:'A',value:'A',is_correct:type==='multiple_choice'},
+            {label:'B',value:'B',is_correct:type==='multiple_checkbox'},
+            {label:'C',value:'C',is_correct:false},
+            {label:'D',value:'D',is_correct:false}
+          ];
+        }
+        return;
+      }
+      draft.options=[];
+    }
+
+    function readTypePanel(panel){
+      if(!panel) return;
+      if(draft.type==='multiple_choice' || draft.type==='multiple_checkbox' || draft.type==='true_false'){
+        draft.options=[...panel.querySelectorAll('[data-option-row]')].map(row=>(
+          {
+            label:row.querySelector('[data-label]')?.value.trim() || '',
+            value:row.querySelector('[data-value]')?.value.trim() || '',
+            is_correct:!!row.querySelector('[data-correct]')?.checked
+          }
+        ));
+      }else if(draft.type==='short_answer'){
+        draft.accepted_answers=[...panel.querySelectorAll('[data-answer]')]
+          .map(input=>input.value.trim())
+          .filter(Boolean);
+      }else if(draft.type==='essay'){
+        draft.rubric=panel.querySelector('[data-rubric]')?.value.trim() || '';
+      }else if(draft.type==='file_upload'){
+        draft.file_config={
+          allowed_mime:panel.querySelector('[data-file-format]')?.value || 'pdf',
+          max_size_mb:Number(panel.querySelector('[data-max-size]')?.value || 10),
+          file_required:panel.querySelector('[data-file-required]')?.checked !== false
+        };
+      }
+    }
+
+    function renderTypePanel(panel){
+      normalizeOptionsForType(draft.type);
+      const typeInfo=TYPES[draft.type];
+
+      panel.innerHTML=`
+        <section class="question-type-card-v472">
+          <div class="question-type-card-head-v472">
+            <div class="question-type-card-icon-v472">${draft.type==='file_upload'?'↥':draft.type==='essay'?'✎':'✓'}</div>
+            <div>
+              <span class="eyebrow">${esc(typeInfo.label)}</span>
+              <strong>${esc(typeInfo.description)}</strong>
+              <small>${esc(typeInfo.short)}</small>
+            </div>
+          </div>
+          <div class="question-type-card-body-v472" data-type-body></div>
+        </section>
+      `;
+
+      const body=panel.querySelector('[data-type-body]');
+      const addOptionRow=(option,index,locked=false)=>{
+        const row=document.createElement('div');
+        row.className='question-option-row-v472';
+        row.dataset.optionRow='1';
+        const control = draft.type==='multiple_checkbox' ? 'checkbox' : 'radio';
+        const name = `correct-${window.SYKA_UTILS.randomId('q')}`;
+        row.innerHTML=`
+          <div class="question-option-index-v472">${index+1}</div>
+          <input data-label class="input" value="${escAttr(option.label)}" placeholder="Label, mis. A">
+          <input data-value class="input" value="${escAttr(option.value)}" placeholder="Teks jawaban">
+          <label class="question-correct-v472"><input data-correct type="${control}" ${draft.type==='true_false'?`name="${name}"`:''} ${option.is_correct?'checked':''}> Benar</label>
+          ${locked?'':'<button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>'}
+        `;
+        row.querySelector('[data-correct]').addEventListener('change',()=>{
+          if(draft.type==='multiple_choice' || draft.type==='true_false'){
+            body.querySelectorAll('[data-option-row] [data-correct]').forEach(el=>{ if(el!==row.querySelector('[data-correct]')) el.checked=false; });
+          }
+        });
+        row.querySelector('[data-remove]')?.addEventListener('click',()=>row.remove());
+        body.appendChild(row);
+      };
+
+      if(typeInfo.supportsOptions){
+        draft.options.forEach((option,index)=>addOptionRow(option,index,draft.type==='true_false'));
+        if(draft.type!=='true_false'){
+          const controls=document.createElement('div');
+          controls.className='question-type-controls-v472';
+          controls.innerHTML=`<button type="button" class="btn btn-secondary btn-sm" data-add-option>+ Tambah opsi</button><span>Gunakan 2–8 opsi.</span>`;
+          controls.querySelector('[data-add-option]').onclick=()=>{
+            const count=body.querySelectorAll('[data-option-row]').length;
+            if(count>=8){ window.SYKA_TOAST.show('Maksimal 8 opsi.','warning'); return; }
+            const letters=['A','B','C','D','E','F','G','H'];
+            addOptionRow({label:letters[count],value:'',is_correct:false},count,false);
+          };
+          body.appendChild(controls);
+        }
+      } else if(draft.type==='short_answer'){
+        if(!draft.accepted_answers.length) draft.accepted_answers=[''];
+        draft.accepted_answers.forEach(answer=>{
+          const row=document.createElement('div'); row.className='question-answer-row-v472';
+          row.innerHTML=`<input data-answer class="input" value="${escAttr(answer)}" placeholder="Jawaban yang diterima"><button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>`;
+          row.querySelector('[data-remove]').onclick=()=>row.remove();
+          body.appendChild(row);
+        });
+        const controls=document.createElement('div'); controls.className='question-type-controls-v472';
+        controls.innerHTML='<button type="button" class="btn btn-secondary btn-sm" data-add-answer>+ Tambah jawaban</button><span>Contoh: Jakarta, jakarta, DKI Jakarta.</span>';
+        controls.querySelector('[data-add-answer]').onclick=()=>{
+          const row=document.createElement('div'); row.className='question-answer-row-v472'; row.innerHTML='<input data-answer class="input" placeholder="Jawaban yang diterima"><button type="button" class="btn btn-ghost btn-xs" data-remove>Hapus</button>'; row.querySelector('[data-remove]').onclick=()=>row.remove(); body.insertBefore(row,controls);
+        };
+        body.appendChild(controls);
+      } else if(draft.type==='essay'){
+        body.innerHTML=`<div class="type-note-v47"><strong>Penilaian manual</strong><span>Jawaban masuk ke Grading. Tidak ada kunci otomatis.</span></div><label>Rubrik penilaian<textarea data-rubric rows="5" placeholder="Contoh: akurasi 50%, argumentasi 30%, presentasi 20%">${esc(draft.rubric)}</textarea></label>`;
+      } else if(draft.type==='file_upload'){
+        body.innerHTML=`<div class="form-grid-2"><label>Format file<select data-file-format><option value="pdf">PDF</option><option value="image">Gambar</option><option value="document">Dokumen</option><option value="mixed">PDF + gambar + dokumen</option></select></label><label>Maksimal ukuran<input data-max-size type="number" min="1" max="50" value="${draft.file_config.max_size_mb}"></label></div><label class="checkline"><input data-file-required type="checkbox" ${draft.file_config.file_required?'checked':''}> File wajib</label>`;
+        body.querySelector('[data-file-format]').value=draft.file_config.allowed_mime;
+      }
+    }
+
+    function renderPreview(root){
+      const label=TYPES[draft.type]?.label || draft.type;
+      root.innerHTML=`<div class="question-live-preview-v472"><div><span class="eyebrow">PREVIEW PESERTA</span><span class="preview-type-pill-v472">${esc(label)}</span></div><strong>${esc(draft.prompt || 'Pertanyaan akan muncul di sini')}</strong><small>${draft.points} poin · ${draft.required?'Wajib':'Opsional'}</small></div>`;
+    }
+
+    window.SYKA_MODAL.open({
+      title:existing?'Edit soal':'Tambah soal',
+      wide:true,
+      html:`
+        <form id="qf" class="form-card question-form-v47">
+          <div class="question-builder-header-v472">
+            <div><span class="eyebrow">QUESTION BUILDER</span><h3>${existing?'Edit pertanyaan':'Buat pertanyaan baru'}</h3><p>Pilih tipe soal terlebih dahulu. Panel di bawah akan menyesuaikan tanpa kehilangan data umum.</p></div>
+          </div>
+          <div class="form-grid-2">
+            <label>Kompetisi<select id="competition"><option value="">Tidak terikat</option>${comps.map(c=>`<option value="${c.id}" ${draft.competition_id===c.id?'selected':''}>${esc(c.title)}</option>`).join('')}</select></label>
+            <label>Jenis soal<select id="type">${Object.entries(TYPES).map(([value,info])=>`<option value="${value}" ${draft.type===value?'selected':''}>${esc(info.label)}</option>`).join('')}</select></label>
+          </div>
+          <label>Pertanyaan *<textarea id="prompt" rows="5" required>${esc(draft.prompt)}</textarea></label>
+          <div class="form-grid-3"><label>Poin<input id="points" type="number" min="0" step="0.5" value="${draft.points}"></label><label>Urutan<input id="order" type="number" min="0" value="${draft.display_order}"></label><label class="checkline question-required-v47"><input id="required" type="checkbox" ${draft.required?'checked':''}> Wajib dijawab</label></div>
+          <div id="type-zone"></div>
+          <div class="question-preview-v47" id="question-preview"></div>
+          <div id="qf-feedback"></div>
+          <div class="form-actions form-actions-sticky-v47"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary" id="save-question">${existing?'Simpan perubahan':'Simpan soal'}</button></div>
+        </form>
+      `,
+      onOpen:box=>{
+        const form=box.querySelector('#qf');
+        const typeEl=box.querySelector('#type');
+        const zone=box.querySelector('#type-zone');
+        const preview=box.querySelector('#question-preview');
+        const feedback=box.querySelector('#qf-feedback');
+        const syncCommon=()=>{
+          draft.competition_id=box.querySelector('#competition').value || '';
+          draft.prompt=box.querySelector('#prompt').value.trim();
+          draft.points=Number(box.querySelector('#points').value || 0);
+          draft.display_order=Number(box.querySelector('#order').value || 0);
+          draft.required=box.querySelector('#required').checked;
+        };
+        const syncBeforeTypeChange=()=>{ syncCommon(); readTypePanel(zone); };
+        const renderAll=()=>{ renderTypePanel(zone); renderPreview(preview); };
+
+        box.querySelector('[data-close]').onclick=()=>window.SYKA_MODAL.close();
+        typeEl.addEventListener('change',()=>{ syncBeforeTypeChange(); draft.type=typeEl.value; renderAll(); });
+        box.querySelector('#competition').addEventListener('change',syncCommon);
+        box.querySelector('#prompt').addEventListener('input',()=>{syncCommon(); renderPreview(preview);});
+        box.querySelector('#points').addEventListener('input',()=>{syncCommon(); renderPreview(preview);});
+        box.querySelector('#required').addEventListener('change',()=>{syncCommon(); renderPreview(preview);});
+
+        renderAll();
+
+        form.addEventListener('submit',async e=>{
+          e.preventDefault();
+          feedback.innerHTML='';
+          syncCommon();
+          readTypePanel(zone);
+          try{
+            if(!draft.prompt) throw new Error('Pertanyaan wajib diisi.');
+            if(!Number.isFinite(draft.points) || draft.points<0) throw new Error('Poin tidak valid.');
+            if(!Number.isInteger(draft.display_order) || draft.display_order<0) throw new Error('Urutan harus berupa angka 0 atau lebih.');
+
+            const payload={
+              question_bank_id:bankId,
+              competition_id:draft.competition_id || null,
+              type:draft.type,
+              prompt:draft.prompt,
+              points:draft.points,
+              required:draft.required,
+              display_order:draft.display_order,
+              config:{}
+            };
+
+            let options=[];
+            if(draft.type==='multiple_choice' || draft.type==='multiple_checkbox' || draft.type==='true_false'){
+              options=draft.options.filter(o=>o.label || o.value);
+              if(options.length<2) throw new Error('Tambahkan minimal 2 opsi.');
+              if(options.some(o=>!o.label || !o.value)) throw new Error('Semua opsi harus memiliki label dan value.');
+              const correct=options.filter(o=>o.is_correct).length;
+              if(draft.type==='multiple_choice' || draft.type==='true_false'){
+                if(correct!==1) throw new Error('Harus ada tepat 1 jawaban benar.');
+              }else if(correct<1){
+                throw new Error('Pilihan majemuk harus memiliki minimal 1 jawaban benar.');
+              }
+            }else if(draft.type==='short_answer'){
+              const accepted=[...new Set(draft.accepted_answers.map(x=>x.trim()).filter(Boolean))];
+              if(!accepted.length) throw new Error('Masukkan minimal 1 jawaban yang diterima.');
+              payload.config={accepted_answers:accepted,case_sensitive:false,trim_whitespace:true};
+            }else if(draft.type==='essay'){
+              payload.config={rubric:draft.rubric || null,manual_grading:true};
+            }else if(draft.type==='file_upload'){
+              payload.config={allowed_mime:draft.file_config.allowed_mime,max_size_mb:Math.max(1,Math.min(50,draft.file_config.max_size_mb)),file_required:draft.file_config.file_required};
+            }
+
+            const saved=await svc().saveQuestion(payload,existing?.id||null);
+            if(typeof svc().replaceOptions==='function'){
+              await svc().replaceOptions(saved.id,options.map((o,i)=>({...o,display_order:i})));
+            }
+
+            window.SYKA_MODAL.close();
+            window.SYKA_TOAST.show(existing?'Soal diperbarui.':'Soal tersimpan.','success');
+            window.SYKA_ROUTER.refresh();
+          }catch(error){
+            feedback.innerHTML=`<div class="inline-error">${esc(error.message||'Soal gagal disimpan.')}</div>`;
+          }
+        });
+      }
+    });
   }
   function importQuestionModal(bankId){window.SYKA_MODAL.open({title:'Import soal',wide:true,html:`<div class="form-card"><p>Gunakan CSV: <code>type,prompt,points,required,display_order</code> atau JSON array objek soal.</p><input type="file" id="question-file" accept=".csv,.json,text/csv,application/json"><div id="import-feedback"></div><div class="form-actions"><button class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary" id="run-import">Import</button></div></div>`,onOpen:b=>{b.querySelector('[data-close]').onclick=()=>window.SYKA_MODAL.close();b.querySelector('#run-import').onclick=async()=>{const f=b.querySelector('#question-file').files?.[0];if(!f){b.querySelector('#import-feedback').innerHTML='<div class="inline-error">Pilih file terlebih dahulu.</div>';return;}try{const txt=await f.text();let rows=[];if(f.name.toLowerCase().endsWith('.json'))rows=JSON.parse(txt);else{const lines=txt.split(/\r?\n/).filter(Boolean);const headers=lines.shift().split(',').map(x=>x.trim());rows=lines.map(line=>{const vals=line.split(',');return Object.fromEntries(headers.map((h,i)=>[h,(vals[i]||'').trim()]));});}for(const [i,row] of rows.entries()){const q=await svc().saveQuestion({question_bank_id:bankId,competition_id:row.competition_id||null,type:row.type||'multiple_choice',prompt:row.prompt||'',points:Number(row.points||1),required:row.required!=='false',display_order:Number(row.display_order||i),config:{}},null);if(Array.isArray(row.options))await svc().replaceOptions(q.id,row.options);}window.SYKA_MODAL.close();window.SYKA_TOAST.show(`${rows.length} soal berhasil diimport.`,'success');window.SYKA_ROUTER.refresh();}catch(error){b.querySelector('#import-feedback').innerHTML=`<div class="inline-error">${esc(error.message||'Import gagal.')}</div>`;}};}});}
   async function grading(root,orgId){const comps=await svc().listCompetitionsAdmin({organizerId:orgId,limit:200});let rows=[];for(const c of comps)rows.push(...await svc().listAttempts({competitionId:c.id}));root.innerHTML=`<div class="toolbar"><div><h2>Grading</h2><p>Auto/manual grading dan finalize score.</p></div><select class="compact-select" id="grading-filter"><option value="">Semua status</option><option>SUBMITTED</option><option>GRADING</option><option>FINALIZED</option></select></div><div class="data-table" id="grading-table">${rows.map(a=>`<div class="data-row" data-status="${esc(a.status)}"><div><strong>${esc(a.profiles?.full_name||a.participant_id)}</strong><small>${esc(a.competitions?.title||'')} · ${esc(a.status)} · Score ${a.score??0}</small></div><div class="row-actions">${a.status!=='FINALIZED'?`<button class="btn btn-ghost btn-sm" data-grade="${a.id}">Grade</button><button class="btn btn-primary btn-sm" data-final="${a.id}">Finalize</button>`:'<span class="status-pill status-success">FINALIZED</span>'}</div></div>`).join('')||window.SYKA_EMPTY.render({title:'Belum ada attempt',text:'Submission peserta akan muncul ketika attempt engine aktif.'})}</div>`;document.getElementById('grading-filter').onchange=e=>root.querySelectorAll('[data-status]').forEach(r=>r.style.display=!e.target.value||r.dataset.status===e.target.value?'flex':'none');root.querySelectorAll('[data-grade]').forEach(b=>b.onclick=()=>gradeModal(b.dataset.grade));root.querySelectorAll('[data-final]').forEach(b=>b.onclick=()=>finalizeModal(b.dataset.final));}
