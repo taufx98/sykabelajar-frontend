@@ -1,0 +1,14 @@
+.sy-auth-card {
+  max-width:420px;
+  margin:auto;
+  padding:40px;
+  background:white;
+  border-radius:var(--sy-radius-lg);
+  box-shadow:var(--sy-shadow-md);
+}
+
+.sy-auth-card input {
+  width:100%;
+  padding:12px;
+  margin-bottom:15px;
+}
