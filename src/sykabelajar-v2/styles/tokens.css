@@ -1,0 +1,10 @@
+:root {
+  --sy-primary: #2563eb;
+  --sy-secondary: #7c3aed;
+  --sy-background: #f8fafc;
+  --sy-surface: #ffffff;
+  --sy-text: #0f172a;
+  --sy-muted: #64748b;
+  --sy-radius: 16px;
+  --sy-shadow: 0 10px 30px rgba(15,23,42,.08);
+}
