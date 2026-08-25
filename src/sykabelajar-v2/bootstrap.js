@@ -1,5 +1,6 @@
 import { startRouter } from "./router/index.js";
 import { initializeV2Core } from "./core/index.js";
+import { getV2AuthState } from "./integration/auth-bridge.js";
 
 /**
  * Sykabelajar V2 Runtime Bootstrap
@@ -11,6 +12,7 @@ import { initializeV2Core } from "./core/index.js";
 
 export async function startSykabelajarV2(options = {}) {
   const core = await initializeV2Core(options);
+  const auth = await getV2AuthState();
   const router = startRouter(options);
 
   document.documentElement.dataset.sykabelajar = "v2";
@@ -19,6 +21,7 @@ export async function startSykabelajarV2(options = {}) {
     version: "2.0",
     status: "initialized",
     core,
+    auth,
     router
   };
 }
