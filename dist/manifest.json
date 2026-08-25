@@ -11,8 +11,8 @@
     "entry": "v2/bootstrap.js",
     "mode": "opt-in"
   },
-  "commit": "22c3c98a423c7a1acaa6cf563a8e1ec9484f1dc3",
-  "generatedAt": "2026-08-26T01:21:31+07:00",
+  "commit": "8dad966fb44bb29767cc3068092d175c282aecc8",
+  "generatedAt": "2026-08-26T01:35:08+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
