@@ -2,6 +2,23 @@ export async function getStudentData(
   supabase,
   userId
 ) {
+  const legacy = window.SYKA_STATE?.getState?.()?.auth || {};
+  if (legacy.user?.id === userId) {
+    const [achievements, competitions] = await Promise.all([
+      window.SYKA_AWARD_SERVICE?.getAwards?.(userId) || [],
+      window.SYKA_COMPETITION_SERVICE?.list?.({ limit: 20 }) || []
+    ]);
+    return {
+      profile: legacy.profile || null,
+      achievements,
+      xp: legacy.profile?.xp ? [{ amount: legacy.profile.xp }] : [],
+      competitions
+    };
+  }
+
+  if (!supabase?.from || !userId) {
+    return { profile: null, achievements: [], xp: [], competitions: [] };
+  }
 
   const profile = await supabase
     .from("profiles")
@@ -22,9 +39,15 @@ export async function getStudentData(
     .eq("user_id", userId);
 
 
+  const competitions = await supabase
+    .from("competitions")
+    .select("*")
+    .limit(20);
+
   return {
     profile: profile.data,
     achievements: achievements.data || [],
-    xp: xp.data || []
+    xp: xp.data || [],
+    competitions: competitions.data || []
   };
 }
