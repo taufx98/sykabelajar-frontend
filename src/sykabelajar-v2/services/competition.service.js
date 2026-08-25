@@ -1,19 +1,25 @@
 export async function getCompetitions(supabase) {
-  return [];
+  const { data, error } = await supabase
+    .from("competitions")
+    .select("*");
+
+  if (error) throw error;
+
+  return data || [];
 }
 
 
-export async function getCompetitionDetail(
+export async function getCompetitionById(
   supabase,
-  competitionId
+  id
 ) {
-  return {};
-}
+  const { data, error } = await supabase
+    .from("competitions")
+    .select("*")
+    .eq("id", id)
+    .single();
 
+  if (error) throw error;
 
-export async function submitAttempt(
-  supabase,
-  payload
-) {
-  return {};
+  return data;
 }
