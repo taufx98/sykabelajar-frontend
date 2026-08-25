@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html>
+<html b:css='false'
+      b:defaultwidgetversion='2'
+      b:layoutsVersion='3'
+      class='theme-root'
+      xmlns='http://www.w3.org/1999/xhtml'
+      xmlns:b='http://www.google.com/2005/gml/b'
+      xmlns:data='http://www.google.com/2005/gml/data'
+      xmlns:expr='http://www.google.com/2005/gml/expr'>
+
+<head>
+  <meta content='width=device-width, initial-scale=1' name='viewport'/>
+  <meta content='light dark' name='color-scheme'/>
+  <meta content='index,follow' name='robots'/>
+  <title><data:blog.pageTitle/></title>
+
+  <b:skin><![CDATA[
+    html, body { margin:0; padding:0; min-height:100%; }
+    body { background:#f8fafc; color:#0f172a; }
+    .theme-root { font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .blogger-content { width:100%; }
+    .hidden { display:none !important; }
+  ]]></b:skin>
+
+  <link href='https://fonts.googleapis.com' rel='preconnect'/>
+  <link crossorigin='anonymous' href='https://fonts.gstatic.com' rel='preconnect'/>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap' rel='stylesheet'/>
+
+  <!-- Sykabelajar frontend: CSS served from GitHub through jsDelivr -->
+</head>
+
+<body>
+  <div id='app-shell'>
+
+    <!-- Desktop sidebar rendered by frontend -->
+    <aside class='sidebar' id='syka-sidebar'></aside>
+
+    <main class='main-area'>
+
+      <!-- Header rendered by frontend -->
+      <header class='header' id='syka-header'></header>
+
+      <!-- Application root rendered by frontend router -->
+      <div id='page-root'></div>
+
+      <!--
+        Blogger CMS fallback.
+        The application router hides this area for known app routes.
+        For normal Blogger posts/pages that are not application routes,
+        this area remains available so Blogger can still function as CMS/SEO surface.
+      -->
+      <div class='blogger-content' id='blogger-content'>
+        <b:section id='blog-content'
+                   maxwidgets='1'
+                   showaddelement='yes'>
+          <b:widget id='Blog1'
+                    locked='true'
+                    title='Postingan Blog'
+                    type='Blog'
+                    version='2'
+                    visible='true'>
+            <b:widget-settings>
+              <b:widget-setting name='showDateHeader'>false</b:widget-setting>
+              <b:widget-setting name='showShareButtons'>true</b:widget-setting>
+              <b:widget-setting name='showCommentLink'>true</b:widget-setting>
+              <b:widget-setting name='showAuthor'>true</b:widget-setting>
+              <b:widget-setting name='showLabels'>true</b:widget-setting>
+              <b:widget-setting name='showTimestamp'>true</b:widget-setting>
+              <b:widget-setting name='showInlineAds'>false</b:widget-setting>
+              <b:widget-setting name='showBacklinks'>false</b:widget-setting>
+              <b:widget-setting name='showReactions'>false</b:widget-setting>
+              <b:widget-setting name='showLocation'>false</b:widget-setting>
+            </b:widget-settings>
+
+            <b:includable id='main'>
+              <div class='blogger-posts'>
+                <b:loop values='data:posts' var='post'>
+                  <article class='syka-card blogger-post'>
+                    <h1 class='blogger-post-title'>
+                      <a expr:href='data:post.url'>
+                        <data:post.title/>
+                      </a>
+                    </h1>
+                    <div class='blogger-post-meta'>
+                      <span><data:post.dateHeader/></span>
+                    </div>
+                    <div class='blogger-post-body'>
+                      <data:post.body/>
+                    </div>
+                  </article>
+                </b:loop>
+              </div>
+            </b:includable>
+          </b:widget>
+        </b:section>
+      </div>
+    </main>
+
+    <!-- Mobile bottom navigation rendered by frontend -->
+    <div class='bottom-nav' id='syka-bottom-nav'></div>
+
+    <!-- Mobile navigation overlay -->
+    <div class='hidden' id='mobile-nav-overlay'></div>
+  </div>
+
+  <!-- Reserved Blogger section for future theme widgets; intentionally hidden -->
+  <b:section id='blogger-hidden'
+             maxwidgets='1'
+             showaddelement='no'>
+    <b:widget id='HTML999'
+              locked='true'
+              title='Sykabelajar Application Shell'
+              type='HTML'
+              version='2'
+              visible='false'>
+      <b:widget-settings>
+        <b:widget-setting name='content'/>
+      </b:widget-settings>
+      <b:includable id='main'>
+        <div></div>
+      </b:includable>
+    </b:widget>
+  </b:section>
+
+  <!-- Public/client configuration only. Never place service-role/API secrets here. -->
+  <script type='text/javascript'>
+  // <![CDATA[
+  window.SYKA_CONFIG = {
+    APP_NAME: 'Sykabelajar.id',
+    APP_VERSION: '4.3.0-control-plane',
+
+    ROUTE_MODE: 'query',
+    APP_PAGE: '/p/app.html',
+
+    ASSET_BASE_URL: 'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist',
+
+    SUPABASE_URL: 'https://jrfogwueytiddnanetth.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_H3zjdAEE-ItQ08YRj8MieQ_kNMcsAHa',
+
+    CLOUDINARY_CLOUD_NAME: 'sykabelajar',
+    CLOUDINARY_UPLOAD_PRESET: 'sykabelajar_preset',
+    CLOUDINARY_FOLDER: 'sykabelajar/users/profiles'
+  };
+  // ]]>
+  </script>
+
+  <!-- Backend/media client libraries -->
+  <script src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'></script>
+  <script src='https://upload-widget.cloudinary.com/latest/global/all.js'></script>
+
+  <!-- Sykabelajar frontend resilient bootloader v4.3. The Theme remains stable; only dist/* changes in GitHub. -->
+  <script type='text/javascript'>
+  // <![CDATA[
+  (function () {
+    if (window.__SYKA_BOOT_STARTED__) return;
+    window.__SYKA_BOOT_STARTED__ = true;
+
+    var BASE = 'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist';
+    var MANIFEST = 'https://raw.githubusercontent.com/taufx98/sykabelajar-frontend/refs/heads/main/dist/manifest.json';
+    var CACHE_BUST = String(Date.now());
+
+    function addCss(url) {
+      return new Promise(function(resolve, reject) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = url;
+        link.onload = resolve;
+        link.onerror = reject;
+        document.head.appendChild(link);
+      });
+    }
+
+    function addScript(url) {
+      return new Promise(function(resolve, reject) {
+        var script = document.createElement('script');
+        script.src = url;
+        script.async = false;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    function startApp() {
+      if (window.SYKA_APP && typeof window.SYKA_APP.init === 'function') {
+        try {
+          window.SYKA_APP.init();
+        } catch (error) {
+          console.error('[Sykabelajar] App init failed:', error);
+        }
+      } else {
+        console.error('[Sykabelajar] App bundle loaded but SYKA_APP.init() is missing.');
+      }
+    }
+
+    async function boot() {
+      window.SYKA_CONFIG = window.SYKA_CONFIG || {};
+      window.SYKA_CONFIG.ASSET_BASE_URL = BASE;
+
+      try {
+        var response = await fetch(MANIFEST + '?cb=' + CACHE_BUST, {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'omit'
+        });
+
+        if (!response.ok) {
+          throw new Error('Manifest HTTP ' + response.status);
+        }
+
+        var manifest = await response.json();
+
+        if (!manifest || !manifest.styles || !manifest.app || !manifest.vendor) {
+          throw new Error('Manifest tidak lengkap.');
+        }
+
+        var assetBase = manifest.base || BASE;
+
+        window.__SYKA_RELEASE__ = manifest;
+        window.SYKA_CONFIG.ASSET_BASE_URL = assetBase;
+        window.SYKA_CONFIG.ASSET_RELEASE = manifest.commit || '';
+        window.SYKA_CONFIG.APP_VERSION = manifest.version || manifest.commit || '4.3-runtime';
+
+        await addCss(
+          assetBase + '/' + manifest.styles + '?cb=' + CACHE_BUST
+        );
+
+        await addScript(
+          assetBase + '/' + manifest.vendor + '?cb=' + CACHE_BUST
+        );
+
+        await addScript(
+          assetBase + '/' + manifest.app + '?cb=' + CACHE_BUST
+        );
+
+        startApp();
+      } catch (error) {
+        console.error('[Sykabelajar] Release manifest boot failed:', error);
+
+        // Compatibility fallback for the current repository layout.
+        try {
+          await addCss(BASE + '/styles.min.css?cb=' + CACHE_BUST);
+          await addScript(BASE + '/vendor.min.js?cb=' + CACHE_BUST);
+          await addScript(BASE + '/app.min.js?cb=' + CACHE_BUST);
+          startApp();
+        } catch (fallbackError) {
+          console.error('[Sykabelajar] Fallback frontend boot failed:', fallbackError);
+
+          var root = document.getElementById('page-root');
+          if (root) {
+            root.innerHTML = '<div style="max-width:720px;margin:48px auto;padding:24px;font-family:Inter,system-ui,sans-serif"><h2 style="margin:0 0 8px">Sykabelajar sedang memuat ulang</h2><p style="margin:0 0 16px;color:#64748b">Asset frontend belum tersedia dari CDN. Tunggu beberapa detik lalu refresh halaman.</p><button type="button" onclick="location.reload()" style="padding:10px 16px;border:0;border-radius:10px;background:#7c3aed;color:#fff;font-weight:700;cursor:pointer">Refresh</button></div>';
+          }
+        }
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot, { once: true });
+    } else {
+      boot();
+    }
+  })();
+  // ]]>
+  </script>
+</body>
+</html>
