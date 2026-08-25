@@ -3,12 +3,12 @@
   "version": "4.13.0",
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.1f6bca6faff9.min.js",
-  "styles": "styles.72836dd33a58.min.css",
+  "app": "app.dde2b2c5a8a5.min.js",
+  "styles": "styles.f03a4c4f6fc2.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "14e06aafac92713e160f52f23298399cb5731998",
-  "generatedAt": "2026-08-23T19:54:20+07:00",
+  "commit": "a618fd1ed423e54b2825445ea4d7572826509190",
+  "generatedAt": "2026-08-25T20:42:35+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }

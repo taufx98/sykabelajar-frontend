@@ -246,3 +246,53 @@ body{background:var(--bg);overflow-x:hidden}
 .profile-quick{position:relative;z-index:110}.profile-trigger{min-height:40px}.profile-menu{min-width:220px;padding:8px}.profile-menu button{min-height:40px}
 @media(max-width:900px){.workspace-layout-v410{grid-template-columns:1fr}.workspace-progress-v410{display:flex;overflow:auto;gap:5px}.workspace-progress-v410 button{min-width:170px;grid-template-columns:28px auto}.award-asset-grid{grid-template-columns:1fr 1fr}.home-x-layout{grid-template-columns:minmax(0,1fr) 250px}.home-rail-left{display:block;position:static}.home-rail-right{position:static}}
 @media(max-width:700px){.home-x-layout{display:block}.home-rail-left{display:block;position:static}.home-rail-right{display:none}.x-user-card{border-radius:16px;margin-bottom:12px}.home-quick-nav{display:none!important}.home-feed-header{padding-top:4px}.header-announcement{display:flex;min-width:0;max-width:55vw;padding:7px 10px}.header-actions{gap:4px}.header-notification-panel{right:8px;width:calc(100vw - 16px);top:72px;max-height:70vh}.profile-menu{position:fixed;top:72px;right:10px;width:min(290px,calc(100vw - 20px))}.profile-quick{display:block}.profile-text{display:none}.profile-trigger{border:0;background:transparent;padding:2px}.workspace-editor-actions{align-items:stretch}.workspace-editor-actions .btn{flex:1}.schedule-trigger-row{grid-template-columns:1fr}.schedule-trigger.time{width:100%;min-width:0}.schedule-popover,.syka-date-popover{max-width:calc(100vw - 24px)!important}.awards-page-head{flex-direction:column;align-items:stretch}.award-asset-grid{grid-template-columns:1fr}.control-tabs{top:72px}.workspace-progress-v410{border-radius:14px}.workspace-progress-v410 button{min-width:145px}}
+.syka-datetime-picker{position:relative;width:100%;min-width:0}
+.syka-datetime-row{display:grid;grid-template-columns:minmax(0,1fr) 132px;gap:10px;align-items:end}
+.syka-datetime-date-field{display:grid;gap:6px;color:var(--muted,#64748b);font-size:10px;font-weight:800}
+.syka-datetime-input-wrap{position:relative;display:flex;align-items:center}
+.syka-datetime-input-wrap input{width:100%;min-height:48px;padding:0 46px 0 14px;border:1px solid var(--border,#e2e8f0);border-radius:14px;background:var(--surface,#fff);color:var(--text,#0f172a);font:inherit;font-size:14px;font-weight:750;letter-spacing:.02em;box-shadow:0 1px 2px rgba(15,23,42,.03);outline:none}
+.syka-datetime-input-wrap input:focus{border-color:#a78bfa;box-shadow:0 0 0 4px rgba(124,58,237,.10)}
+.syka-datetime-calendar-btn{position:absolute;right:6px;width:36px;height:36px;border:0;border-radius:10px;background:var(--brandSoft,#f3e8ff);color:var(--brand,#7c3aed);display:grid;place-items:center;font-size:15px;cursor:pointer}
+.syka-datetime-calendar-btn:hover{background:#ede9fe}
+.syka-datetime-time-trigger{min-height:48px;border:1px solid var(--border,#e2e8f0);border-radius:14px;background:var(--surface,#fff);color:var(--text,#0f172a);display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:8px;padding:0 13px;cursor:pointer;font:inherit;font-weight:800;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.syka-datetime-time-trigger:hover{border-color:#c4b5fd;background:#faf7ff}
+.syka-datetime-time-icon{width:26px;height:26px;border-radius:8px;background:var(--brandSoft,#f3e8ff);color:var(--brand,#7c3aed);display:grid;place-items:center;font-size:11px}
+.syka-datetime-time-text{font-variant-numeric:tabular-nums;text-align:left}
+.syka-datetime-chevron{color:var(--muted,#64748b)}
+.syka-datetime-popover{position:fixed;display:none;width:min(690px,calc(100vw - 24px));max-height:min(560px,calc(100vh - 24px));overflow:hidden;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 28px 80px rgba(15,23,42,.22);z-index:10050;padding:14px}
+.syka-datetime-picker.open .syka-datetime-popover{display:block}
+.syka-datetime-popover:before{content:"";position:absolute;top:-7px;left:32px;width:14px;height:14px;background:#fff;border-left:1px solid #e2e8f0;border-top:1px solid #e2e8f0;transform:rotate(45deg)}
+.syka-datetime-popover-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:2px 2px 12px;border-bottom:1px solid #eef2f7}
+.syka-datetime-popover-head strong{display:block;font-size:15px}
+.syka-datetime-popover-head small{display:block;color:#64748b;font-size:10px;margin-top:3px;line-height:1.4}
+.syka-datetime-toolbar{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:10px;align-items:center;padding:12px 0}
+.syka-datetime-month-year{width:100%;min-height:40px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;padding:0 12px;font:inherit;font-weight:850;text-align:center;cursor:pointer}
+.syka-datetime-toolbar .calendar-nav{background:#fff;border-color:#e2e8f0;color:#475569}
+.syka-datetime-body{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(190px,.75fr);gap:14px;min-height:280px}
+.syka-datetime-calendar{min-width:0;padding:8px;border:1px solid #eef2f7;border-radius:16px;background:#fbfcfe}
+.syka-datetime-time-panel{min-width:0;padding:12px;border:1px solid #eef2f7;border-radius:16px;background:#fbfcfe;display:grid;grid-template-rows:auto 1fr;gap:10px}
+.syka-datetime-time-head strong{display:block;font-size:13px}
+.syka-datetime-time-head small{display:block;color:#94a3b8;font-size:9px;margin-top:2px}
+.syka-time-columns{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch;min-height:230px}
+.syka-time-columns>span{display:grid;place-items:start center;padding-top:7px;color:#94a3b8;font-weight:900}
+.syka-time-col{max-height:230px;overflow:auto;padding:3px;scrollbar-width:thin}
+.syka-time-option{width:100%;min-height:38px;border:0;border-radius:10px;background:transparent;color:#334155;font:inherit;font-size:14px;font-weight:800;cursor:pointer;font-variant-numeric:tabular-nums}
+.syka-time-option:hover{background:#f1f5f9}
+.syka-time-option.selected{background:#e9ddff;color:#6d28d9;box-shadow:inset 0 0 0 1px #d8b4fe}
+.syka-datetime-picker .calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.syka-datetime-picker .calendar-weekdays span{text-align:center;font-size:10px;font-weight:850;color:#64748b;padding:5px 0}
+.syka-datetime-picker .calendar-weekdays span:nth-child(6),.syka-datetime-picker .calendar-weekdays span:nth-child(7){color:#dc2626}
+.syka-datetime-picker .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.syka-datetime-picker .calendar-day{min-height:38px;border:0;border-radius:10px;background:transparent;color:#1e293b;font-weight:750;font-size:12px;cursor:pointer}
+.syka-datetime-picker .calendar-day:hover{background:#f1f5f9}
+.syka-datetime-picker .calendar-day.muted{color:#cbd5e1}
+.syka-datetime-picker .calendar-day.weekend:not(.muted){color:#dc2626}
+.syka-datetime-picker .calendar-day.selected{background:#e5e7eb;color:#111827;box-shadow:inset 0 0 0 1px #d1d5db}
+.syka-datetime-picker .calendar-day.today:not(.selected){box-shadow:inset 0 0 0 1px #c4b5fd;color:#6d28d9}
+.syka-datetime-footer{display:flex;align-items:center;gap:10px;justify-content:space-between;padding-top:12px;margin-top:12px;border-top:1px solid #eef2f7;color:#94a3b8;font-size:9px}
+.syka-datetime-footer .btn{min-height:36px}
+.syka-datetime-picker[data-disabled="true"]{opacity:.62}
+.syka-datetime-picker[data-disabled="true"] .syka-datetime-popover{pointer-events:none}
+@media(max-width:760px){.syka-datetime-popover{width:min(620px,calc(100vw - 16px));padding:10px}.syka-datetime-body{grid-template-columns:1fr;max-height:430px;overflow:auto}.syka-datetime-time-panel{min-height:200px}.syka-time-columns{min-height:170px}.syka-time-col{max-height:170px}.syka-datetime-row{grid-template-columns:1fr 112px}.syka-datetime-time-trigger{padding:0 9px}}
+@media(max-width:520px){.syka-datetime-row{grid-template-columns:1fr}.syka-datetime-time-trigger{width:100%}.syka-datetime-popover{border-radius:16px}.syka-datetime-toolbar{grid-template-columns:36px minmax(0,1fr) 36px}.syka-datetime-month-year{min-width:0}.syka-datetime-calendar{padding:6px}.syka-datetime-picker .calendar-day{min-height:34px;font-size:11px}.syka-datetime-footer{flex-wrap:wrap}.syka-datetime-footer>span{order:3;width:100%;text-align:center}}
+.date-control input[type="datetime-local"],.date-control input[type="date"]{appearance:none;-webkit-appearance:none;background:#fff!important;color:#0f172a!important}

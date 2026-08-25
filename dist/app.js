@@ -160,7 +160,8 @@
       const disabled=(maxDate&&iso>maxDate)||(minDate&&iso<minDate);
       const selectedClass=selected===iso?' selected':'';
       const today=normalizeYmd('',true)===iso?' today':'';
-      return `<button type="button" class="calendar-day${c.muted?' muted':''}${selectedClass}${today}" data-calendar-date="${iso}" ${disabled?'disabled':''}>${c.day}</button>`;
+      const weekend=(new Date(c.year,c.month-1,c.day).getDay()===0||new Date(c.year,c.month-1,c.day).getDay()===6)?' weekend':'';
+      return `<button type="button" class="calendar-day${c.muted?' muted':''}${selectedClass}${today}${weekend}" data-calendar-date="${iso}" ${disabled?'disabled':''}>${c.day}</button>`;
     }).join('')}</div>`;
   }
   function formatCalendarDisplay(value,placeholder='Pilih tanggal'){
@@ -233,6 +234,50 @@
       render();
     });
   }
+  function dateTimePickerMarkup(id,value='',options={}){
+    const p=dateTimeParts(value); const pad=n=>String(n).padStart(2,'0');
+    const current=`${p.year}-${pad(p.month)}-${pad(p.day)}`;
+    const years=[]; const baseYear=new Date().getFullYear();
+    for(let y=baseYear-20;y<=baseYear+20;y++) years.push(y);
+    const monthYearOptions=[];
+    for(const y of years) for(let m=1;m<=12;m++) monthYearOptions.push({value:`${y}-${pad(m)}`,label:`${CAL_MONTHS[m-1]} ${y}`,y,m});
+    return `<div class="syka-datetime-picker" data-datetime-picker="${escapeHtml(id)}" data-max-date="${escapeHtml(options.maxDate||'')}" data-min-date="${escapeHtml(options.minDate||'')}" data-disabled="${options.disabled?'true':'false'}">
+      <div class="syka-datetime-row">
+        <label class="syka-datetime-date-field"><span>Tanggal${options.required?' *':''}</span><span class="syka-datetime-input-wrap"><input type="text" inputmode="numeric" maxlength="10" autocomplete="off" data-datetime-manual placeholder="dd/mm/yyyy" value="${pad(p.day)}/${pad(p.month)}/${p.year}" ${options.disabled?'disabled':''}><button type="button" class="syka-datetime-calendar-btn" data-datetime-open aria-label="Buka kalender" ${options.disabled?'disabled':''}>▣</button></span></label>
+        <button type="button" class="syka-datetime-time-trigger" data-datetime-open ${options.disabled?'disabled':''}><span class="syka-datetime-time-icon">◷</span><span data-datetime-time-text>${pad(p.hour)}:${pad(Math.floor(p.minute/5)*5)}</span><span class="syka-datetime-chevron">⌄</span></button>
+      </div>
+      <div class="syka-datetime-popover" data-datetime-popover>
+        <div class="syka-datetime-popover-head"><div><strong>${escapeHtml(options.title||'Pilih tanggal & waktu')}</strong><small>${escapeHtml(options.help||'Gunakan kalender atau ketik tanggal secara manual.')}</small></div><button type="button" class="syka-icon-btn" data-datetime-close aria-label="Tutup">×</button></div>
+        <div class="syka-datetime-toolbar"><button type="button" class="calendar-nav" data-datetime-prev aria-label="Bulan sebelumnya">‹</button><select class="syka-datetime-month-year" data-datetime-month-year aria-label="Bulan dan tahun">${monthYearOptions.map(o=>`<option value="${o.value}" ${o.y===p.year&&o.m===p.month?'selected':''}>${o.label}</option>`).join('')}</select><button type="button" class="calendar-nav" data-datetime-next aria-label="Bulan berikutnya">›</button></div>
+        <div class="syka-datetime-body"><div class="syka-datetime-calendar"><div data-datetime-calendar-body>${calendarGridHtml(p.year,p.month,current,options.maxDate||'',options.minDate||'')}</div></div><div class="syka-datetime-time-panel"><div class="syka-datetime-time-head"><strong>Waktu</strong><small>Interval 5 menit</small></div><div class="syka-time-columns"><div class="syka-time-col" data-datetime-hours>${Array.from({length:24},(_,h)=>`<button type="button" class="syka-time-option ${h===p.hour?'selected':''}" data-datetime-hour-option="${h}">${pad(h)}</button>`).join('')}</div><span>:</span><div class="syka-time-col" data-datetime-minutes>${Array.from({length:12},(_,i)=>i*5).map(mi=>`<button type="button" class="syka-time-option ${mi===Math.floor(p.minute/5)*5?'selected':''}" data-datetime-minute-option="${mi}">${pad(mi)}</button>`).join('')}</div></div></div></div>
+        <div class="syka-datetime-footer"><button type="button" class="btn btn-ghost btn-sm" data-datetime-today>Hari ini</button><span>Waktu lokal perangkat</span><button type="button" class="btn btn-primary btn-sm" data-datetime-done>Selesai</button></div>
+      </div>
+      <input type="hidden" id="${escapeHtml(id)}" value="${escapeHtml(value||'')}">
+      <input type="hidden" data-dt-year="${escapeHtml(id)}" value="${p.year}"><input type="hidden" data-dt-month="${escapeHtml(id)}" value="${p.month}"><input type="hidden" data-dt-day="${escapeHtml(id)}" value="${p.day}"><input type="hidden" data-dt-hour="${escapeHtml(id)}" value="${p.hour}"><input type="hidden" data-dt-minute="${escapeHtml(id)}" value="${Math.floor(p.minute/5)*5}">
+    </div>`;
+  }
+  function bindDateTimePickers(root=document){
+    const fields=[...root.querySelectorAll('.syka-datetime-picker[data-datetime-picker]')]; if(!fields.length)return;
+    const pad=n=>String(n).padStart(2,'0'); const closeAll=()=>fields.forEach(f=>f.classList.remove('open'));
+    const validManual=/^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const getState=field=>{const id=field.dataset.datetimePicker; const q=s=>field.querySelector(s)?.value; return {id,year:Number(q(`[data-dt-year="${id}"]`)),month:Number(q(`[data-dt-month="${id}"]`)),day:Number(q(`[data-dt-day="${id}"]`)),hour:Number(q(`[data-dt-hour="${id}"]`)),minute:Number(q(`[data-dt-minute="${id}"]`))};};
+    const setValue=(field,key,val)=>{const id=field.dataset.datetimePicker; const el=field.querySelector(`[data-dt-${key}="${id}"]`); if(el)el.value=String(val);};
+    function position(field){const trigger=field.querySelector('[data-datetime-open]');const pop=field.querySelector('[data-datetime-popover]');if(!trigger||!pop)return;const r=trigger.getBoundingClientRect();const gutter=12;const width=Math.min(690,innerWidth-gutter*2);const height=Math.min(520,innerHeight-gutter*2);let left=Math.max(gutter,Math.min(r.left,innerWidth-width-gutter));let top=r.bottom+10;if(top+height>innerHeight-gutter)top=Math.max(gutter,r.top-height-10);pop.style.left=`${left}px`;pop.style.top=`${top}px`;pop.style.width=`${width}px`;pop.style.maxHeight=`${height}px`;}
+    fields.forEach(field=>{
+      const id=field.dataset.datetimePicker; const manual=field.querySelector('[data-datetime-manual]'); const pop=field.querySelector('[data-datetime-popover]'); if(!manual||!pop)return;
+      function render(){const st=getState(field);const raw=`${st.year}-${pad(st.month)}-${pad(st.day)}`;field.querySelector('[data-datetime-time-text]').textContent=`${pad(st.hour)}:${pad(st.minute)}`;manual.value=`${pad(st.day)}/${pad(st.month)}/${st.year}`;field.querySelector('[data-datetime-month-year]').value=`${st.year}-${pad(st.month)}`;field.querySelector('[data-datetime-calendar-body]').innerHTML=calendarGridHtml(st.year,st.month,raw,field.dataset.maxDate||'',field.dataset.minDate||'');field.querySelectorAll('[data-calendar-date]').forEach(btn=>btn.addEventListener('click',()=>{const [yy,mm,dd]=btn.dataset.calendarDate.split('-').map(Number);setValue(field,'year',yy);setValue(field,'month',mm);setValue(field,'day',dd);render();}));field.querySelectorAll('[data-datetime-hour-option]').forEach(btn=>{btn.classList.toggle('selected',Number(btn.dataset.datetimeHourOption)===st.hour);btn.addEventListener('click',()=>{setValue(field,'hour',Number(btn.dataset.datetimeHourOption));render();});});field.querySelectorAll('[data-datetime-minute-option]').forEach(btn=>{btn.classList.toggle('selected',Number(btn.dataset.datetimeMinuteOption)===st.minute);btn.addEventListener('click',()=>{setValue(field,'minute',Number(btn.dataset.datetimeMinuteOption));render();});});const hs=field.querySelector(`[data-datetime-hours] .selected`),ms=field.querySelector(`[data-datetime-minutes] .selected`);hs?.scrollIntoView({block:'center'});ms?.scrollIntoView({block:'center'});const dt=new Date(st.year,st.month-1,st.day,st.hour,st.minute,0,0);const hidden=field.querySelector(`#${CSS.escape(id)}`);if(hidden&&!Number.isNaN(dt.getTime()))hidden.value=dt.toISOString();}
+      manual.addEventListener('input',()=>{let v=manual.value.replace(/\D/g,'').slice(0,8);if(v.length>4)v=v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4);else if(v.length>2)v=v.slice(0,2)+'/'+v.slice(2);manual.value=v;const m=v.match(validManual);if(!m)return;const dd=Number(m[1]),mm=Number(m[2]),yy=Number(m[3]);if(mm<1||mm>12||dd<1||dd>daysInMonth(yy,mm)||yy<1900||yy>2200)return;setValue(field,'day',dd);setValue(field,'month',mm);setValue(field,'year',yy);render();});
+      field.querySelectorAll('[data-datetime-open]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const was=field.classList.contains('open');closeAll();if(!was){field.classList.add('open');render();requestAnimationFrame(()=>position(field));}}));
+      field.querySelector('[data-datetime-close]')?.addEventListener('click',e=>{e.preventDefault();closeAll();});field.querySelector('[data-datetime-done]')?.addEventListener('click',()=>{render();closeAll();});
+      field.querySelector('[data-datetime-prev]')?.addEventListener('click',()=>{const st=getState(field);st.month--;if(st.month<1){st.month=12;st.year--;}setValue(field,'month',st.month);setValue(field,'year',st.year);const max=daysInMonth(st.year,st.month);if(st.day>max)setValue(field,'day',max);render();});
+      field.querySelector('[data-datetime-next]')?.addEventListener('click',()=>{const st=getState(field);st.month++;if(st.month>12){st.month=1;st.year++;}setValue(field,'month',st.month);setValue(field,'year',st.year);const max=daysInMonth(st.year,st.month);if(st.day>max)setValue(field,'day',max);render();});
+      field.querySelector('[data-datetime-month-year]')?.addEventListener('change',e=>{const [yy,mm]=e.target.value.split('-').map(Number);setValue(field,'year',yy);setValue(field,'month',mm);const max=daysInMonth(yy,mm);if(getState(field).day>max)setValue(field,'day',max);render();});
+      field.querySelector('[data-datetime-today]')?.addEventListener('click',()=>{const t=normalizeYmd('',true).split('-').map(Number);setValue(field,'year',t[0]);setValue(field,'month',t[1]);setValue(field,'day',t[2]);render();});
+      render();
+    });
+    if(!root.__SYKA_DATETIME_OUTSIDE){root.__SYKA_DATETIME_OUTSIDE=true;const reposition=()=>fields.forEach(f=>{if(f.classList.contains('open'))position(f);});window.addEventListener('resize',reposition);window.addEventListener('scroll',reposition,{passive:true});document.addEventListener('click',e=>{if(!e.target.closest('.syka-datetime-picker'))closeAll();});}
+  }
+
   function bindSchedulePickers(root=document){
     const fields=[...root.querySelectorAll('.schedule-field[data-schedule-field]')];
     if(!fields.length)return;
@@ -339,7 +384,7 @@
   function getStoredTheme(){return localStorage.getItem('syka_theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}
   function safeJson(value,fallback=null){try{return JSON.parse(value);}catch(_){return fallback;}}
   function statusClass(status){const s=String(status||'').toUpperCase();if(['ACTIVE','APPROVED','PUBLISHED','RESULT_PUBLISHED','COMPLETED','PAID'].includes(s))return 'status-success';if(['PENDING','DRAFT','REGISTRATION_OPEN','GRADING','PROCESSING','REVIEW'].includes(s))return 'status-warning';if(['CANCELLED','REJECTED','REVOKED','SUSPENDED','FAILED'].includes(s))return 'status-danger';return 'status-neutral';}
-  window.SYKA_UTILS={escapeHtml,initials,formatNumber,formatDate,formatTime,formatDateTime,toLocalInputValue,localInputToISO,dateTimeParts,setDateTimeField,readDateTimeField,calendarPickerMarkup,bindCalendarPickers,bindSchedulePickers,normalizeYmd,debounce,routePath,queryParams,randomId,cloudinaryTransform,getStoredTheme,safeJson,statusClass};
+  window.SYKA_UTILS={escapeHtml,initials,formatNumber,formatDate,formatTime,formatDateTime,toLocalInputValue,localInputToISO,dateTimeParts,setDateTimeField,readDateTimeField,calendarPickerMarkup,dateTimePickerMarkup,bindDateTimePickers,bindCalendarPickers,bindSchedulePickers,normalizeYmd,debounce,routePath,queryParams,randomId,cloudinaryTransform,getStoredTheme,safeJson,statusClass};
 })();
 
 
@@ -1889,8 +1934,8 @@ window.SYKA_PAGE_AWARDS={render};})();
             <label>Masa berlaku<select data-term><option value="30">30 hari</option><option value="365">1 tahun (365 hari)</option><option value="CUSTOM">Custom</option></select></label>
           </div>
           <div class="form-grid-2">
-            <label>Mulai<input data-start type="datetime-local" value="${active?.starts_at?window.SYKA_UTILS.toLocalInputValue(active.starts_at):''}"></label>
-            <label>Berakhir<input data-end type="datetime-local" value="${active?.ends_at?window.SYKA_UTILS.toLocalInputValue(active.ends_at):''}" disabled></label>
+            ${window.SYKA_UTILS.dateTimePickerMarkup(`org-start-${org.id}` ,active?.starts_at||'',{title:'Mulai masa paket',help:'Pilih tanggal dan waktu mulai.'})}
+            ${window.SYKA_UTILS.dateTimePickerMarkup(`org-end-${org.id}` ,active?.ends_at||'',{title:'Berakhir masa paket',help:'Dipakai untuk masa berlaku custom.'})}
           </div>
           <label>Alasan wajib<textarea data-reason rows="2" placeholder="Alasan override / perubahan paket"></textarea></label>
           <div class="form-actions"><button type="submit" class="btn btn-primary">Simpan perubahan paket</button></div>
@@ -1900,18 +1945,31 @@ window.SYKA_PAGE_AWARDS={render};})();
     <section class="panel-card"><div class="panel-head"><div><span class="eyebrow">PURCHASE HISTORY</span><h3>Order paket penyelenggara</h3></div></div>
       ${orderRows.slice(0,50).map(o=>{const item=(o.order_items||[]).find(i=>i.product_type==='PLAN');return `<div class="data-row"><div><strong>#${esc(String(o.id).slice(0,8))} · ${esc(item?.name||item?.product_ref||'Plan')}</strong><small>${esc(o.status)} · dibuat ${fmt(o.created_at)} · ${esc(item?.metadata?.billing_period||'MONTHLY')}</small></div><strong>${money(o.total)}</strong></div>`;}).join('')||'<div class="empty-inline">Belum ada order paket.</div>'}
     </section>`;
+    window.SYKA_UTILS.bindDateTimePickers(root);
     root.querySelector('#lock-organizer-settings')?.addEventListener('click',()=>{privilegedUntil=0;window.SYKA_ROUTER.refresh();});
     root.querySelectorAll('.organizer-plan-override').forEach(form=>{
-      const term=form.querySelector('[data-term]'), start=form.querySelector('[data-start]'), end=form.querySelector('[data-end]');
+      const term=form.querySelector('[data-term]');
+      const startPrefix=`org-start-${form.dataset.org}`;
+      const endPrefix=`org-end-${form.dataset.org}`;
       const sync=()=>{
-        if(term.value==='CUSTOM'){end.disabled=false;return;}
-        end.disabled=true;
-        const v=new Date(start.value||Date.now());
+        if(term.value==='CUSTOM')return;
+        const startIso=window.SYKA_UTILS.readDateTimeField(startPrefix,form);
+        if(!startIso)return;
+        const v=new Date(startIso);
         if(Number.isNaN(v.getTime()))return;
         v.setDate(v.getDate()+Number(term.value));
-        end.value=window.SYKA_UTILS.toLocalInputValue(v.toISOString());
+        window.SYKA_UTILS.setDateTimeField(endPrefix,v.toISOString(),form);
+        const endField=form.querySelector(`[data-datetime-picker="${endPrefix}"]`);
+        if(endField){
+          const endDt=window.SYKA_UTILS.dateTimeParts(v.toISOString());
+          const pad=n=>String(n).padStart(2,'0');
+          endField.querySelector('[data-datetime-manual]')?.setAttribute('value',`${pad(endDt.day)}/${pad(endDt.month)}/${endDt.year}`);
+          if(endField.querySelector('[data-datetime-manual]')) endField.querySelector('[data-datetime-manual]').value=`${pad(endDt.day)}/${pad(endDt.month)}/${endDt.year}`;
+          if(endField.querySelector('[data-datetime-time-text]')) endField.querySelector('[data-datetime-time-text]').textContent=`${pad(endDt.hour)}:${pad(endDt.minute)}`;
+        }
       };
-      term.addEventListener('change',sync); start.addEventListener('change',()=>{if(term.value!=='CUSTOM')sync();});
+      term.addEventListener('change',sync);
+      form.querySelector(`[data-dt-value="${endPrefix}"]`);
       form.addEventListener('submit',async e=>{
         e.preventDefault();
         const plan=form.querySelector('[data-plan]').value;
@@ -1919,7 +1977,7 @@ window.SYKA_PAGE_AWARDS={render};})();
         if(!plan||!reason){window.SYKA_TOAST.show('Paket dan alasan wajib diisi.','warning');return;}
         const btn=form.querySelector('button[type="submit"]');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Menyimpan…';
         try{
-          await svc().privilegedAssignOrganizerPlan(form.dataset.org,plan,window.SYKA_UTILS.localInputToISO(start.value),window.SYKA_UTILS.localInputToISO(end.value),reason);
+          await svc().privilegedAssignOrganizerPlan(form.dataset.org,plan,window.SYKA_UTILS.readDateTimeField(startPrefix,form),window.SYKA_UTILS.readDateTimeField(endPrefix,form),reason);
           window.SYKA_TOAST.show('Paket penyelenggara diperbarui.','success');
           window.SYKA_ROUTER.refresh();
         }catch(error){
@@ -2011,40 +2069,13 @@ window.SYKA_PAGE_AWARDS={render};})();
   function competitionRow(c){const poster=window.SYKA_UTILS.cloudinaryTransform(c.poster_url,{width:120,height:80,crop:'fill'});return `<div class="data-row competition-admin-row" data-comp-row data-status="${esc(c.status)}"><div class="row-main"><div class="media-thumb">${poster?`<img src="${esc(poster)}" alt="" loading="lazy">`:'✦'}</div><div><div class="row-title"><strong>${esc(c.title)}</strong><span class="status-pill ${window.SYKA_UTILS.statusClass(c.status)}">${esc(c.status)}</span></div><small>${esc(c.category||'Kompetisi')} · ${esc(c.slug||'')} · ${esc(c.visibility||'PUBLIC')}</small><div class="chip-row"><span class="chip">Registrasi ${fmt(c.registration_starts_at)} → ${fmt(c.registration_ends_at)}</span><span class="chip">Mulai ${fmt(c.starts_at)}</span></div></div></div><div class="row-actions"><button class="btn btn-ghost btn-sm" data-edit="${c.id}">Edit</button><button class="btn btn-secondary btn-sm" data-config="${c.id}">Config</button><button class="btn btn-primary btn-sm" data-transition="${c.id}">Transisi</button></div></div>`;}
   function bindCompetitionRows(root,rows){root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>competitionModal(rows.find(x=>x.id===b.dataset.edit)));root.querySelectorAll('[data-config]').forEach(b=>b.onclick=()=>competitionConfigModal(rows.find(x=>x.id===b.dataset.config)));root.querySelectorAll('[data-transition]').forEach(b=>b.onclick=()=>transitionModal(rows.find(x=>x.id===b.dataset.transition)));}
   function dateField(id,label,value,required=false){
-    const p=window.SYKA_UTILS.dateTimeParts(value);
-    const months=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-    const y0=new Date().getFullYear();
-    const years=Array.from({length:11},(_,i)=>y0-3+i);
-    const maxDay=new Date(p.year,p.month,0).getDate();
-    const days=Array.from({length:maxDay},(_,i)=>i+1);
-    const hours=Array.from({length:24},(_,i)=>i);
-    const minutes=Array.from({length:12},(_,i)=>i*5);
-    const options=(items,current,labeler=x=>String(x).padStart(2,'0'))=>items.map(x=>`<option value="${x}" ${Number(x)===Number(current)?'selected':''}>${labeler(x)}</option>`).join('');
-    return `<div class="schedule-field" data-schedule-field="${id}">
-      <div class="schedule-field-label">${label}${required?' *':''}</div>
-      <div class="schedule-trigger-row">
-        <button type="button" class="schedule-trigger" data-schedule-open="${id}"><span class="schedule-trigger-icon">▣</span><span data-schedule-date-text></span><span class="schedule-chevron">⌄</span></button>
-        <button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text></span><span class="schedule-chevron">⌄</span></button>
-      </div>
-      <div class="schedule-popover" data-schedule-popover="${id}">
-        <div class="schedule-popover-head"><div><strong>Atur ${label.toLowerCase()}</strong><small>Pilih tanggal dan waktu</small></div><button type="button" class="syka-icon-btn schedule-popover-close" data-schedule-done aria-label="Tutup">×</button></div>
-        <div class="schedule-popover-section"><span class="schedule-section-title">Tanggal</span><div class="schedule-select-grid">
-          <label>Hari<select data-dt-day="${id}">${options(days,p.day)}</select></label>
-          <label>Bulan<select data-dt-month="${id}">${months.map((m,i)=>`<option value="${i+1}" ${i+1===p.month?'selected':''}>${m}</option>`).join('')}</select></label>
-          <label>Tahun<select data-dt-year="${id}">${options(years,p.year,x=>String(x))}</select></label>
-        </div></div>
-        <div class="schedule-popover-section"><span class="schedule-section-title">Waktu</span><div class="schedule-select-grid schedule-time-grid">
-          <label>Jam<select data-dt-hour="${id}">${options(hours,p.hour)}</select></label>
-          <label>Menit<select data-dt-minute="${id}">${options(minutes,p.minute)}</select></label>
-        </div></div>
-        <div class="schedule-popover-footer"><span>Waktu lokal perangkat</span><button type="button" class="btn btn-primary btn-sm" data-schedule-done>Selesai</button></div>
-      </div>
-    </div>`;
+    return window.SYKA_UTILS.dateTimePickerMarkup(id,value,{title:label,required,help:'Pilih tanggal dan waktu lokal.'});
   }
 
   async function competitionModal(current=null){
     const organizers=await svc().listOrganizers().catch(()=>[]); const p=current||{};
     window.SYKA_MODAL.open({title:current?'Edit kompetisi':'Buat kompetisi baru',wide:true,html:`<form id="comp-form" class="form-card"><div class="form-section-title"><div><span class="eyebrow">BASIC INFO</span><h2>${current?'Edit':'Buat'} kompetisi</h2></div><span class="form-required">* wajib</span></div><div class="form-grid-2"><label>Judul *<input id="title" required value="${esc(p.title||'')}"></label><label>Slug *<input id="slug" required value="${esc(p.slug||'')}"><small class="field-help">Contoh: olimpiade-sains-2026</small></label></div><div class="form-grid-2"><label>Kategori<select id="category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option><option ${p.category==='Uji Kompetensi'?'selected':''}>Uji Kompetensi</option></select></label><label>Visibility<select id="visibility"><option ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>PUBLIC</option><option ${p.visibility==='UNLISTED'?'selected':''}>UNLISTED</option><option ${p.visibility==='PRIVATE'?'selected':''}>PRIVATE</option></select></label></div><label>Deskripsi singkat<textarea id="short" rows="4" placeholder="Jelaskan kompetisi dengan ringkas…">${esc(p.short_description||'')}</textarea></label><div class="upload-field-card"><div><span class="eyebrow">POSTER KOMPETISI</span><h3>Upload poster</h3><p>Gambar langsung ke Cloudinary. Rasio ideal 16:9.</p></div><div class="upload-preview" id="admin-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP • maksimal 10 MB</small></div>'}</div><button type="button" class="btn btn-secondary" id="admin-poster-upload">${p.poster_url?'Ganti poster':'Upload poster'}</button><input type="hidden" id="poster" value="${esc(p.poster_url||'')}"><input type="hidden" id="poster-public-id" value="${esc(p.poster_public_id||'')}"><input type="hidden" id="poster-width" value="${p.poster_width||''}"><input type="hidden" id="poster-height" value="${p.poster_height||''}"><input type="hidden" id="poster-version" value="${esc(p.poster_version||'')}"><input type="hidden" id="poster-resource" value="${esc(p.poster_resource_type||'')}"></div>${!current?`<label>Organizer *<select id="organizer_id" required>${organizers.map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label>`:''}<div class="form-section-title compact"><div><span class="eyebrow">TIMELINE</span><h2>Tanggal & jam</h2><p>Pilih tanggal dan jam lokal dengan kontrol yang mudah dibaca.</p></div></div><div class="form-grid-2">${dateField('registration_start','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('registration_end','Pendaftaran berakhir',p.registration_ends_at,true)}</div><div class="form-grid-2">${dateField('start_at','Kompetisi mulai',p.starts_at,true)}${dateField('end_at','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('announcement_at','Pengumuman hasil',p.announcement_at,false)}<div id="comp-feedback"></div><div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">${current?'Simpan perubahan':'Buat kompetisi'}</button></div></form>`,onOpen:body=>{
+      window.SYKA_UTILS.bindDateTimePickers(body);
       body.querySelector('#admin-poster-upload').onclick=async()=>{try{const info=await window.SYKA_CLOUDINARY.openCompetitionImageWidget();if(!info?.secure_url)throw new Error('Cloudinary tidak mengembalikan file poster.');body.querySelector('#poster').value=info.secure_url||'';body.querySelector('#poster-public-id').value=info.public_id||'';body.querySelector('#poster-width').value=info.width||'';body.querySelector('#poster-height').value=info.height||'';body.querySelector('#poster-version').value=info.version||'';body.querySelector('#poster-resource').value=info.resource_type||'image';body.querySelector('#admin-poster-preview').innerHTML=`<img src="${esc(info.secure_url)}" alt="Poster"><div class="upload-file-meta"><strong>${esc(info.original_filename||'Poster kompetisi')}</strong></div>`;body.querySelector('#admin-poster-upload').textContent='Ganti poster';}catch(e){window.SYKA_TOAST.show(e.message||'Upload gagal.','error');}};
       body.querySelector('#comp-form').onsubmit=async e=>{e.preventDefault();const feedback=body.querySelector('#comp-feedback');const payload={title:body.querySelector('#title').value.trim(),slug:body.querySelector('#slug').value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,''),category:body.querySelector('#category').value.trim()||'Kompetisi',short_description:body.querySelector('#short').value.trim()||null,visibility:body.querySelector('#visibility').value,poster_url:body.querySelector('#poster').value.trim()||null,poster_public_id:body.querySelector('#poster-public-id').value.trim()||null,poster_width:Number(body.querySelector('#poster-width').value)||null,poster_height:Number(body.querySelector('#poster-height').value)||null,poster_version:body.querySelector('#poster-version').value.trim()||null,poster_resource_type:body.querySelector('#poster-resource').value.trim()||'image',registration_starts_at:window.SYKA_UTILS.readDateTimeField('registration_start', body),registration_ends_at:window.SYKA_UTILS.readDateTimeField('registration_end', body),starts_at:window.SYKA_UTILS.readDateTimeField('start_at', body),ends_at:window.SYKA_UTILS.readDateTimeField('end_at', body),announcement_at:window.SYKA_UTILS.readDateTimeField('announcement_at', body)};if(!current)payload.organizer_id=body.querySelector('#organizer_id')?.value||null;try{await svc().saveCompetition(payload,current?.id||null);window.SYKA_MODAL.close();window.SYKA_TOAST.show(current?'Kompetisi diperbarui.':'Kompetisi dibuat sebagai DRAFT.','success');window.SYKA_ROUTER.refresh();}catch(error){feedback.innerHTML=`<div class="inline-error">${esc(error.message||'Gagal menyimpan kompetisi.')}</div>`;}};
     }});
@@ -2352,6 +2383,7 @@ window.SYKA_PAGE_AWARDS={render};})();
         <div class="form-actions"><button type="button" class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary">Simpan slide</button></div>
       </form>`,
       onOpen:b=>{
+        window.SYKA_UTILS.bindDateTimePickers(b);
         let info=null;
         b.querySelector('[data-close]').onclick=()=>window.SYKA_MODAL.close();
         b.querySelector('#promo-upload').onclick=async()=>{
@@ -2537,53 +2569,7 @@ window.SYKA_PAGE_AWARDS={render};})();
   }
 
   function dateField(id,label,value,required=false){
-    const p=U.dateTimeParts(value||new Date().toISOString());
-    const pad=n=>String(n).padStart(2,'0');
-    return `<div class="schedule-field" data-schedule-field="${id}"><div class="schedule-field-label">${esc(label)}${required?' *':''}</div><div class="schedule-trigger-row"><label class="schedule-manual-wrap"><span> Tanggal</span><input type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" data-schedule-manual="${id}" value="${pad(p.day)}/${pad(p.month)}/${p.year}"></label><button type="button" class="schedule-trigger" data-schedule-open="${id}"><span class="schedule-trigger-icon">▣</span><span data-schedule-date-text>${pad(p.day)} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][p.month-1]} ${p.year}</span><span class="schedule-chevron">⌄</span></button><button type="button" class="schedule-trigger time" data-schedule-open="${id}"><span class="schedule-trigger-icon">◷</span><span data-schedule-time-text>${pad(p.hour)}:${pad(Math.floor(p.minute/5)*5)}</span><span class="schedule-chevron">⌄</span></button></div><div class="schedule-popover" data-schedule-popover="${id}"><div class="schedule-popover-head"><div><strong>Atur ${esc(label.toLowerCase())}</strong><small>Pilih tanggal dan waktu lokal</small></div><button type="button" class="syka-icon-btn schedule-popover-close" data-schedule-close>×</button></div><div class="calendar-toolbar schedule-calendar-toolbar"><button type="button" class="calendar-nav" data-schedule-prev>‹</button><strong class="calendar-month-title" data-schedule-calendar-title></strong><button type="button" class="calendar-nav" data-schedule-next>›</button></div><div class="schedule-calendar" data-schedule-calendar-body></div><div class="schedule-popover-section"><span class="schedule-section-title">Waktu</span><div class="schedule-time-pickers"><label>Jam<select data-dt-hour="${id}">${Array.from({length:24},(_,i)=>`<option value="${i}" ${i===Number(p.hour)?'selected':''}>${pad(i)}</option>`).join('')}</select></label><span class="time-separator">:</span><label>Menit<select data-dt-minute="${id}">${Array.from({length:12},(_,i)=>i*5).map(i=>`<option value="${i}" ${i===Math.floor(p.minute/5)*5?'selected':''}>${pad(i)}</option>`).join('')}</select></label></div></div><div class="schedule-popover-footer"><button type="button" class="btn btn-ghost btn-sm" data-schedule-today>Hari ini</button><span>Waktu lokal perangkat</span><button type="button" class="btn btn-primary btn-sm" data-schedule-done>Selesai</button></div><input type="hidden" data-dt-year="${id}" value="${p.year}"><input type="hidden" data-dt-month="${id}" value="${p.month}"><input type="hidden" data-dt-day="${id}" value="${p.day}"><input type="hidden" data-dt-value="${id}" value="${esc(value||'')}"></div></div>`;
-  }
-
-  function competitionBasicsHtml(c){
-    const p=c||{};
-    return `<section class="workspace-section-v49"><div class="workspace-section-head"><div><span class="eyebrow">01 · INFORMASI</span><h2>Informasi kompetisi</h2><p>Data utama kompetisi dan asset publik.</p></div><span class="section-state-pill">${esc(p.status||'DRAFT')}</span></div><div class="form-grid-2"><label>Nama kompetisi *<div class="input-action-row-v410"><input id="ws-title" value="${esc(p.title||'')}" required><button type="button" class="btn btn-secondary btn-sm" id="ws-check-name">Cek nama</button></div><span class="field-help" id="ws-name-check">Nama akan digunakan untuk slug otomatis.</span></label><label>Kategori<select id="ws-category"><option ${p.category==='Kompetisi'||!p.category?'selected':''}>Kompetisi</option><option ${p.category==='Olimpiade'?'selected':''}>Olimpiade</option><option ${p.category==='Tryout'?'selected':''}>Tryout</option><option ${p.category==='Lomba Kreatif'?'selected':''}>Lomba Kreatif</option></select></label><label>Visibilitas<select id="ws-visibility"><option value="PUBLIC" ${p.visibility==='PUBLIC'||!p.visibility?'selected':''}>Publik</option><option value="UNLISTED" ${p.visibility==='UNLISTED'?'selected':''}>Tidak terdaftar</option><option value="PRIVATE" ${p.visibility==='PRIVATE'?'selected':''}>Privat</option></select></label></div><label>Deskripsi singkat<textarea id="ws-short" rows="4">${esc(p.short_description||'')}</textarea></label><div class="upload-inline-grid-v49"><div class="upload-field-card"><div class="upload-preview" id="ws-poster-preview">${p.poster_url?`<img src="${esc(p.poster_url)}" alt="Poster"><div class="upload-file-meta"><strong>Poster tersimpan</strong><small>Pilih file baru untuk mengganti.</small></div>`:'<div class="upload-placeholder"><span>↑</span><strong>Belum ada poster</strong><small>PNG, JPG, WEBP · maksimal 10 MB</small></div>'}</div><input type="file" id="ws-poster-file" accept="image/png,image/jpeg,image/webp" hidden><button class="btn btn-secondary" type="button" id="ws-poster-btn">${p.poster_url?'Ganti poster':'Upload poster'}</button></div><div class="upload-field-card"><div class="upload-preview" id="ws-juknis-preview">${p.juknis_url?`<div class="upload-file-meta"><strong>Juknis tersimpan</strong><small>PDF siap dibaca peserta.</small></div>`:'<div class="upload-placeholder"><span>PDF</span><strong>Belum ada Juknis</strong><small>PDF · maksimal 15 MB</small></div>'}</div><input type="file" id="ws-juknis-file" accept="application/pdf" hidden><button class="btn btn-secondary" type="button" id="ws-juknis-btn">${p.juknis_url?'Ganti Juknis':'Upload Juknis'}</button></div></div><div class="workspace-actions"><button class="btn btn-primary" type="button" id="ws-save-basic">Simpan informasi</button></div></section>`;
-  }
-
-  function eligibilityHtml(rules){
-    const r=rules||{};
-    const grades=[['SD4','Kelas 4 SD'],['SD5','Kelas 5 SD'],['SD6','Kelas 6 SD'],['SMP1','Kelas 1 SMP / MTs'],['SMP2','Kelas 2 SMP / MTs'],['SMP3','Kelas 3 SMP / MA/MTs'],['SMA1','Kelas 1 SMA / MA / SMK'],['SMA2','Kelas 2 SMA / MA / SMK'],['SMA3','Kelas 3 SMA / MA / SMK']];
-    const selected=new Set(r.allowed_grades||[]);
-    if(!selected.size && r.min_grade&&r.max_grade){ for(const [v] of grades){const n=v.startsWith('SD')?6:v.startsWith('SMP')?7+Number(v.slice(3)||1)-1:10+Number(v.slice(3)||1)-1;if(n>=Number(r.min_grade)&&n<=Number(r.max_grade))selected.add(v);} }
-    return `<section class="workspace-section-v49"><div class="workspace-section-head"><div><span class="eyebrow">02 · ELIGIBILITY</span><h2>Siapa yang bisa ikut?</h2><p>Pilih kelas secara langsung. Sistem akan menggunakan pilihan ini untuk kelayakan peserta dan persiapan soal.</p></div></div><div class="eligibility-grade-grid-v410">${grades.map(([v,l])=>`<label class="eligibility-grade-card-v410"><input type="checkbox" data-grade-scope="${v}" ${selected.has(v)?'checked':''}><span><strong>${l}</strong><small>${v}</small></span></label>`).join('')}</div><div class="eligibility-note-v410"><strong>Catatan paket</strong><span>Free: persiapan soal/sertifikat dilakukan per kelas. Premium/Pro: tersedia import tabel Excel sesuai template.</span></div><div class="form-grid-2"><label class="checkline"><input id="ws-tw-required" type="checkbox" ${r.twibbon_required?'checked':''}> Twibbon wajib</label><label class="checkline"><input id="ws-social-required" type="checkbox" ${r.social_proof_required?'checked':''}> Social proof wajib</label></div><div class="workspace-actions"><button class="btn btn-primary" type="button" id="ws-save-rules">Simpan aturan</button></div></section>`;
-  }
-
-  function timelineHtml(c){
-    const p=c||{};
-    return `<section class="workspace-section-v49"><div class="workspace-section-head"><div><span class="eyebrow">03 · JADWAL</span><h2>Tanggal & jam</h2><p>Semua waktu memakai picker kalender dan waktu compact.</p></div></div><div class="form-grid-2 schedule-grid-v49">${dateField('ws-rs','Pendaftaran mulai',p.registration_starts_at,true)}${dateField('ws-re','Pendaftaran berakhir',p.registration_ends_at,true)}${dateField('ws-start','Kompetisi mulai',p.starts_at,true)}${dateField('ws-end','Kompetisi berakhir',p.ends_at,true)}</div>${dateField('ws-ann','Pengumuman',p.announcement_at,false)}<div class="workspace-actions"><button class="btn btn-primary" type="button" id="ws-save-timeline">Simpan jadwal</button></div></section>`;
-  }
-
-  // Compatibility alias: older bundles referenced competitionWorkspace.
-  // Keep both names valid so a mixed/cached asset cannot break the Organizer module.
-  async function competitionWorkspace(root,orgId,competitionId){
-    return workspaceCompetition(root,orgId,competitionId);
-  }
-
-  async function competitionReady(comp,orgId){
-    try{
-      const [rules,rewards,tw,banks]=await Promise.all([
-        svc().getRegistrationRules(comp.id).catch(()=>null),
-        svc().listRewards(comp.id).catch(()=>[]),
-        svc().listTwibbonTemplates({competitionId:comp.id}).catch(()=>[]),
-        svc().listQuestionBanks({organizerId:orgId}).catch(()=>[])
-      ]);
-      const allowedGrades=[...(rules?.allowed_grades||[])];
-      const grades=allowedGrades.length>0;
-      const rewardOk=(rewards||[]).some(r=>String(r.title||'').trim() && Number(r.points||0)>0);
-      const twOk=(tw||[]).some(t=>t.is_active && t.image_url && String(t.name||'').trim());
-      const bankGrades=new Set((banks||[]).filter(b=>b.is_active!==false&&b.grade_code).map(b=>String(b.grade_code)));
-      const gradeCovered=allowedGrades.length===0?false:allowedGrades.every(g=>bankGrades.has(String(g)));
-      const bankOk=gradeCovered || ((banks||[]).some(b=>b.is_active!==false) && allowedGrades.length===1);
-      const juknisOk=!!comp.juknis_url;
-      return !!comp.id && !!String(comp.title||'').trim() && !!comp.poster_url && grades && !!comp.registration_starts_at && !!comp.registration_ends_at && !!comp.starts_at && !!comp.ends_at && rewardOk && twOk && juknisOk && bankOk;
-    }catch(_){ return false; }
+    return U.dateTimePickerMarkup(id,value,{title:label,required,help:'Pilih tanggal dan waktu lokal.'});
   }
 
   async function workspaceCompetition(root,orgId,competitionId){
@@ -2635,7 +2621,7 @@ window.SYKA_PAGE_AWARDS={render};})();
       <div class="workspace-bottom-actions-v410"><button class="btn btn-secondary" id="ws-save-all-bottom">${isNew?'Buat kompetisi':'Simpan semua perubahan'}</button><button class="btn btn-primary" id="ws-publish-final" disabled>Publish</button></div><div id="ws-feedback"></div></main></div></div>`;
 
     root.querySelector('#ws-back').onclick=()=>window.SYKA_ROUTER.navigate('/organizer',{organizer:orgId,tab:'competitions'});
-    U.bindSchedulePickers(root);
+    U.bindDateTimePickers(root);
     bindWorkspaceEvents(root,orgId,comp,isNew,banks);
     if(existingId){
       await refreshWorkspaceData(root,orgId,comp.id);
