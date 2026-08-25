@@ -1,0 +1,19 @@
+.sy-competition-detail,
+.sy-exam-room {
+  padding:40px;
+  background:white;
+  border-radius:var(--sy-radius-lg);
+  box-shadow:var(--sy-shadow-md);
+}
+
+.sy-exam-header {
+  display:flex;
+  justify-content:space-between;
+}
+
+.sy-question-box {
+  margin-top:30px;
+  padding:30px;
+  border:1px solid var(--sy-border);
+  border-radius:var(--sy-radius-md);
+}

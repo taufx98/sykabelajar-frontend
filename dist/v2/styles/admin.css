@@ -1,0 +1,6 @@
+.sy-admin-panel {
+  padding:40px;
+  background:white;
+  border-radius:var(--sy-radius-lg);
+  box-shadow:var(--sy-shadow-md);
+}

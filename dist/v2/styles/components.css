@@ -1,0 +1,48 @@
+.sy-btn {
+  border:none;
+  padding:12px 24px;
+  border-radius:999px;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.sy-btn-primary {
+  background:var(--sy-color-primary);
+  color:white;
+}
+
+.sy-btn-secondary {
+  background:var(--sy-color-secondary);
+  color:white;
+}
+
+.sy-badge {
+  padding:6px 12px;
+  border-radius:999px;
+  background:var(--sy-color-primary-soft);
+  color:var(--sy-color-primary);
+  font-size:14px;
+}
+
+.sy-modal {
+  position:fixed;
+  inset:0;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:rgba(15,23,42,.4);
+}
+
+.sy-modal-content {
+  background:white;
+  padding:32px;
+  border-radius:var(--sy-radius-lg);
+  box-shadow:var(--sy-shadow-md);
+}
+
+.sy-empty,
+.sy-loading {
+  padding:40px;
+  text-align:center;
+  color:var(--sy-muted);
+}
