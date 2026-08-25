@@ -1,0 +1,14 @@
+.sy-section {
+  margin-top: 64px;
+}
+
+.sy-feature-section {
+  padding: 40px 0;
+}
+
+.sy-organizer-cta {
+  margin-top:64px;
+  padding:40px;
+  border-radius:var(--sy-radius-lg);
+  background:var(--sy-color-primary-soft);
+}
