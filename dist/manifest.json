@@ -7,8 +7,12 @@
   "styles": "styles.f03a4c4f6fc2.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "7ce50f90f99da8429d16215bdf448d460e849568",
-  "generatedAt": "2026-08-25T23:25:31+07:00",
+  "v2": {
+    "entry": "v2/bootstrap.js",
+    "mode": "opt-in"
+  },
+  "commit": "54a625fcb31d4aa2260f9e0b49420f57d330c217",
+  "generatedAt": "2026-08-26T01:11:46+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
