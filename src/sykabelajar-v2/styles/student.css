@@ -1,0 +1,12 @@
+.sy-dashboard-header {
+  padding:40px;
+  border-radius:var(--sy-radius-lg);
+  background:var(--sy-color-primary-soft);
+}
+
+.sy-profile-card {
+  padding:32px;
+  background:white;
+  border-radius:var(--sy-radius-md);
+  box-shadow:var(--sy-shadow-md);
+}
