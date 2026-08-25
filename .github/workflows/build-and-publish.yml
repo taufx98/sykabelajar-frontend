@@ -1,0 +1,140 @@
+name: Build and publish frontend assets
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-main-assets
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci
+
+      - name: Build release assets
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: node build/build.mjs
+
+      - name: Validate release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/manifest.json
+          test -f dist/loader.js
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const m = JSON.parse(fs.readFileSync('dist/manifest.json', 'utf8'));
+          const required = ['schema', 'repo', 'base', 'app', 'styles', 'vendor', 'loader', 'commit', 'generatedAt'];
+
+          for (const key of required) {
+            if (m[key] === undefined || m[key] === null || m[key] === '') {
+              throw new Error(`manifest missing ${key}`);
+            }
+          }
+
+          if (m.schema !== 2) throw new Error(`Unexpected manifest schema: ${m.schema}`);
+
+          for (const file of [m.app, m.styles, m.vendor, m.loader]) {
+            if (!fs.existsSync(`dist/${file}`)) {
+              throw new Error(`Missing generated file: dist/${file}`);
+            }
+          }
+
+          const loader = fs.readFileSync('dist/loader.js', 'utf8');
+          for (const forbidden of ['app.', 'styles.', 'vendor.']) {
+            if (loader.includes(forbidden)) {
+              throw new Error(`loader.js must not hard-code fingerprinted asset names (${forbidden})`);
+            }
+          }
+
+          console.log(JSON.stringify(m, null, 2));
+          console.log('Release validation passed.');
+          NODE
+
+      - name: Show release manifest
+        run: |
+          cat dist/manifest.json
+          echo
+          ls -lah dist
+
+      - name: Publish generated dist as one commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A dist
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dist changes to publish."
+            exit 0
+          fi
+
+          git commit -m "chore: publish frontend release [skip ci]"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        id: publish
+
+      - name: Purge jsDelivr loader cache
+        if: steps.publish.outputs.changed == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          URL="https://purge.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
+          echo "Purging: $URL"
+          if curl --fail --silent --show-error --location "$URL"; then
+            echo "Loader purge requested successfully."
+          else
+            echo "::warning::Loader purge failed; fingerprinted assets remain valid."
+          fi
+
+      - name: Verify published manifest
+        if: steps.publish.outputs.changed == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          URL="https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/dist/manifest.json"
+          echo "Checking source-of-truth manifest: $URL"
+          curl --fail --silent --show-error --location "$URL?cb=${GITHUB_SHA}" -o /tmp/manifest.json
+          cat /tmp/manifest.json
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Sykabelajar frontend release"
+            echo
+            echo "- Source commit: \\`${GITHUB_SHA}\\`"
+            echo "- Stable loader: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
+            echo "- Source-of-truth manifest: https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/dist/manifest.json"
+            echo "- Fingerprinted assets are generated from content hashes."
+            echo "- loader.js contains no hard-coded asset filenames."
+          } >> "$GITHUB_STEP_SUMMARY"
