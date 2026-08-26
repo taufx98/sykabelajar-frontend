@@ -1,4 +1,5 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Script } from 'node:vm';
 
 const app = 'dist/app.min.js';
@@ -17,14 +18,29 @@ if (code.includes('Aruna Putra') || code.includes('Mira Cendekia') || code.inclu
   throw new Error('Production bundle still contains Bolt demo identity data.');
 }
 
-// Regression guard: detect the actual invalid user_roles query shape rather
-// than failing merely because the text "roles(name)" exists somewhere in a
-// minified bundle or test string.
-const normalized = code.replace(/\s+/g, ' ');
-const userRolesChunks = [...normalized.matchAll(/from\(\s*['"]user_roles['"]\s*\)([^;]{0,300})/gi)].map(m => m[1]);
-const hasInvalidUserRolesRelationship = userRolesChunks.some(chunk => /select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i.test(chunk));
-if (hasInvalidUserRolesRelationship) {
-  throw new Error('Production bundle still uses the invalid user_roles -> roles relationship query.');
+// Validate the source of truth for Supabase role access instead of pattern
+// matching minified production code. Minifiers can join unrelated strings and
+// produce false positives. A real invalid query must exist in source code.
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, name.name);
+    if (name.isDirectory()) out.push(...walk(p));
+    else if (/\.(js|jsx|ts|tsx)$/.test(name.name)) out.push(p);
+  }
+  return out;
+}
+const sourceFiles = walk('src');
+const invalidSource = [];
+for (const file of sourceFiles) {
+  const source = readFileSync(file, 'utf8');
+  if (/from\(\s*['"]user_roles['"]\s*\)/i.test(source) && /select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i.test(source)) {
+    invalidSource.push(file);
+  }
+}
+if (invalidSource.length) {
+  throw new Error(`Invalid user_roles -> roles relationship query found in source: ${invalidSource.join(', ')}`);
 }
 
 if (!code.includes('SYKA_PROFILE_SERVICE') || !code.includes('SYKA_COMPETITION_SERVICE')) {
@@ -36,4 +52,4 @@ if (!code.includes('syka-ui-final-polish') || !code.includes('syka-component-pol
 new Script(code, { filename: app });
 const m = JSON.parse(readFileSync(manifest, 'utf8'));
 if (m.commit && !code.includes('SYKA_STATE')) throw new Error('Production bundle sanity check failed.');
-console.log('Production preflight passed: syntax, SYKA_APP, backend adapters, UI normalizers, and regression guards are clean.');
+console.log('Production preflight passed: syntax, SYKA_APP, backend adapters, UI normalizers, and source-level regression guards are clean.');
