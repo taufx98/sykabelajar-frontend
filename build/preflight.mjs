@@ -17,14 +17,16 @@ if (code.includes('Aruna Putra') || code.includes('Mira Cendekia') || code.inclu
   throw new Error('Production bundle still contains Bolt demo identity data.');
 }
 
-// Regression guard: reject only an actual user_roles query asking for the
-// nested roles(name) relationship. A standalone legacy/test string is not
-// enough to mark the production bundle as invalid.
+// Regression guard: detect the actual invalid user_roles query shape rather
+// than failing merely because the text "roles(name)" exists somewhere in a
+// minified bundle or test string.
 const normalized = code.replace(/\s+/g, ' ');
-const invalidUserRolesRelationship = /(?:from\(\s*['"]user_roles['"]\s*\))[^;]{0,240}?select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i;
-if (invalidUserRolesRelationship.test(normalized)) {
+const userRolesChunks = [...normalized.matchAll(/from\(\s*['"]user_roles['"]\s*\)([^;]{0,300})/gi)].map(m => m[1]);
+const hasInvalidUserRolesRelationship = userRolesChunks.some(chunk => /select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i.test(chunk));
+if (hasInvalidUserRolesRelationship) {
   throw new Error('Production bundle still uses the invalid user_roles -> roles relationship query.');
 }
+
 if (!code.includes('SYKA_PROFILE_SERVICE') || !code.includes('SYKA_COMPETITION_SERVICE')) {
   throw new Error('Production bundle is missing core backend service adapters.');
 }
