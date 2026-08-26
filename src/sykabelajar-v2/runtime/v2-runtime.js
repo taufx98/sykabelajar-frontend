@@ -108,34 +108,59 @@
   }
 
   async function studentContent(){
-    const s=await getSession();if(!s){navigate('/login');return ''}
-    let p=null,xp=0,coins=0,ach=0;
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let profile=null,xp=0,coins=0,ach=0,certs=0,regs=0,tasks=0;
     try{
       const c=supa();
-      const [pr,x,ec,a]=await Promise.all([
+      const [pr,x,ec,a,ce,rg,dt]=await Promise.all([
         c.from('profiles').select('*').eq('id',s.user.id).single(),
         c.from('xp_ledger').select('amount').eq('user_id',s.user.id),
         c.from('edu_coin_ledger').select('amount').eq('user_id',s.user.id),
-        c.from('user_achievements').select('id',{count:'exact',head:true}).eq('user_id',s.user.id)
+        c.from('user_achievements').select('id',{count:'exact',head:true}).eq('user_id',s.user.id),
+        c.from('certificates').select('id',{count:'exact',head:true}).eq('user_id',s.user.id),
+        c.from('registrations').select('id',{count:'exact',head:true}).eq('user_id',s.user.id),
+        c.from('daily_task_claims').select('id',{count:'exact',head:true}).eq('user_id',s.user.id)
       ]);
-      p=pr?.data;xp=(x?.data||[]).reduce((n,v)=>n+Number(v.amount||0),0);coins=(ec?.data||[]).reduce((n,v)=>n+Number(v.amount||0),0);ach=a?.count||0
+      profile=pr?.data||null;
+      xp=(x?.data||[]).reduce((n,v)=>n+Number(v.amount||0),0);
+      coins=(ec?.data||[]).reduce((n,v)=>n+Number(v.amount||0),0);
+      ach=a?.count||0; certs=ce?.count||0; regs=rg?.count||0; tasks=dt?.count||0;
     }catch(_){}
-    return `<section class="v2-dashboard"><span class="v2-kicker">STUDENT</span><h1>Halo, ${esc(p?.full_name||p?.name||s.user.email||'Student')}</h1><p class="v2-muted">Lanjutkan perjalanan belajar dan kompetisimu.</p><div class="v2-stat-grid"><div><small>XP</small><strong>${xp.toLocaleString('id-ID')}</strong></div><div><small>Edu Coin</small><strong>${coins.toLocaleString('id-ID')}</strong></div><div><small>Achievement</small><strong>${ach}</strong></div><div><small>Streak</small><strong>7 hari</strong></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('trophy')}</div><h3>Kompetisi</h3><p>Temukan kompetisi terbaru dan lanjutkan progresmu.</p>${button('/lomba','Buka kompetisi')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('award')}</div><h3>Prestasi</h3><p>Lihat achievement dan sertifikat digitalmu.</p>${button('/prestasi','Lihat prestasi','outline')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('spark')}</div><h3>Daily Task</h3><p>Bangun streak dan klaim XP harian.</p>${button('/daily-tasks','Buka daily task','outline')}</article></div></section>`;
+    return `<section class="v2-dashboard"><span class="v2-kicker">STUDENT</span><h1>Halo, ${esc(profile?.full_name||profile?.name||s.user.email||'Student')}</h1><p class="v2-muted">Ringkas progresmu dan lanjutkan aktivitas hari ini.</p><div class="v2-stat-grid v2-stat-grid-6"><div><small>XP</small><strong>${xp.toLocaleString('id-ID')}</strong></div><div><small>Edu Coin</small><strong>${coins.toLocaleString('id-ID')}</strong></div><div><small>Achievement</small><strong>${ach}</strong></div><div><small>Sertifikat</small><strong>${certs}</strong></div><div><small>Kompetisi</small><strong>${regs}</strong></div><div><small>Daily Task</small><strong>${tasks}</strong></div></div><div class="v2-section-head v2-dashboard-section-head"><div><h2>Aktivitas Utama</h2><p>Pilih apa yang ingin kamu lanjutkan.</p></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('trophy')}</div><h3>Kompetisi</h3><p>Temukan kompetisi terbaru dan lanjutkan progresmu.</p>${button('/lomba','Buka kompetisi')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('spark')}</div><h3>Daily Task</h3><p>Bangun streak dan klaim XP harian.</p>${button('/daily-tasks','Daily task','outline')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('award')}</div><h3>Prestasi & Sertifikat</h3><p>Lihat achievement dan sertifikat yang sudah kamu peroleh.</p>${button('/prestasi','Lihat prestasi','outline')}</article></div></section>`;
   }
-
   async function genericRoleContent(kind){
-    const s=await getSession();if(!s){navigate('/login');return ''}
+    const s=await getSession(); if(!s){navigate('/login');return ''}
     const r=await getRole(s.user.id);
     if(kind==='organizer'&&!['organizer','admin'].includes(r)){navigate('/student');return ''}
     if(kind==='admin'&&r!=='admin'){navigate('/student');return ''}
-    const label=kind==='organizer'?'ORGANIZER':'ADMIN';
-    const title=kind==='organizer'?'Organizer Workspace':'Admin Control Center';
-    const cards=kind==='organizer'
-      ? [['trophy','Competition Builder','Buat dan konfigurasi event kompetisi.','/organizer/competition-builder'],['user','Participants','Kelola peserta event.','/organizer/participants'],['chart','Question Bank','Kelola bank soal dan grading.','/organizer/question-bank']]
-      : [['user','User Management','Kelola akun pengguna.','/admin/users'],['shield','Feature Flags','Kontrol release dan fitur.','/admin/features'],['chart','Audit Logs','Periksa aktivitas platform.','/admin/audit']];
-    return `<section class="v2-dashboard"><span class="v2-kicker">${label}</span><h1>${title}</h1><p class="v2-muted">Workspace terintegrasi dengan sistem Sykabelajar yang sudah ada.</p><div class="v2-stat-grid"><div><small>Role</small><strong>${esc(r)}</strong></div><div><small>Status</small><strong>Active</strong></div><div><small>Workspace</small><strong>V2</strong></div><div><small>Security</small><strong>RLS</strong></div></div><div class="v2-panel-grid">${cards.map(([i,t,d,r])=>`<article class="v2-panel"><div class="v2-panel-icon">${icon(i)}</div><h3>${t}</h3><p>${d}</p>${button(r,t,'outline')}</article>`).join('')}</div></section>`;
-  }
 
+    if(kind==='organizer'){
+      let competitions=0,registrations=0,questionBanks=0;
+      try{
+        const c=supa();
+        const [co,rg,qb]=await Promise.all([
+          c.from('competitions').select('id',{count:'exact',head:true}),
+          c.from('registrations').select('id',{count:'exact',head:true}),
+          c.from('question_banks').select('id',{count:'exact',head:true})
+        ]);
+        competitions=co?.count||0;registrations=rg?.count||0;questionBanks=qb?.count||0;
+      }catch(_){}
+      return `<section class="v2-dashboard"><span class="v2-kicker">ORGANIZER</span><h1>Organizer Workspace</h1><p class="v2-muted">Satu ruang kerja untuk mengelola kompetisi, peserta, dan bank soal.</p><div class="v2-stat-grid"><div><small>Competitions</small><strong>${competitions}</strong></div><div><small>Registrations</small><strong>${registrations}</strong></div><div><small>Question Banks</small><strong>${questionBanks}</strong></div><div><small>Role</small><strong>${esc(r)}</strong></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('trophy')}</div><h3>Competition Builder</h3><p>Buat dan konfigurasi kompetisi baru.</p>${button('/organizer/competition-builder','Buka builder')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('user')}</div><h3>Participants</h3><p>Pantau registrasi dan peserta.</p>${button('/organizer/participants','Kelola peserta','outline')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('chart')}</div><h3>Question Bank</h3><p>Kelola soal, grading items, dan attempt.</p>${button('/organizer/question-bank','Buka bank soal','outline')}</article></div></section>`;
+    }
+
+    let users=0,organizers=0,audits=0,flags=0;
+    try{
+      const c=supa();
+      const [u,o,a,f]=await Promise.all([
+        c.from('profiles').select('id',{count:'exact',head:true}),
+        c.from('organizers').select('id',{count:'exact',head:true}),
+        c.from('audit_logs').select('id',{count:'exact',head:true}),
+        c.from('feature_flags').select('id',{count:'exact',head:true})
+      ]);
+      users=u?.count||0;organizers=o?.count||0;audits=a?.count||0;flags=f?.count||0;
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">ADMIN</span><h1>Admin Control Center</h1><p class="v2-muted">Pantau pengguna, organizer, konfigurasi fitur, dan audit platform.</p><div class="v2-stat-grid"><div><small>Users</small><strong>${users}</strong></div><div><small>Organizers</small><strong>${organizers}</strong></div><div><small>Audit Logs</small><strong>${audits}</strong></div><div><small>Feature Flags</small><strong>${flags}</strong></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('user')}</div><h3>User Management</h3><p>Kelola user dan role.</p>${button('/admin/users','Buka users','outline')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('shield')}</div><h3>Feature Flags</h3><p>Kontrol release dan fitur.</p>${button('/admin/features','Buka flags','outline')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('chart')}</div><h3>Audit & Monitoring</h3><p>Periksa aktivitas platform.</p>${button('/admin/audit','Buka audit','outline')}</article></div></section>`;
+  }
   async function shell(content, current){
     const s=await getSession(), r=s?await getRole(s.user.id):'guest';
     const items=[['/','home','Beranda'],['/lomba','trophy','Lomba'],['/juara','chart','Peringkat'],['/prestasi','award','Awards'],['/daily-tasks','spark','Daily Tasks']];

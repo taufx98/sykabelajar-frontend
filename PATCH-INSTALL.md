@@ -1,15 +1,32 @@
-# Functional Integration Batch 1
+# Functional Integration Batch 2
 
-Scope:
-- Supabase Auth login/register handler binding
-- Role-aware registration choice
-- Error/success feedback for auth
-- Existing auth service remains the source of truth
+## Scope
+Student + Organizer + Admin real-data dashboard integration.
 
-Files:
+### Student
+- XP from `xp_ledger`
+- Edu Coin from `edu_coin_ledger`
+- Achievements from `user_achievements`
+- Certificates from `certificates`
+- Competition registrations from `registrations`
+- Daily task claims from `daily_task_claims`
+
+### Organizer
+- Competition count from `competitions`
+- Registration count from `registrations`
+- Question bank count from `question_banks`
+
+### Admin
+- User count from `profiles`
+- Organizer count from `organizers`
+- Audit log count from `audit_logs`
+- Feature flag count from `feature_flags`
+
+No database schema changes.
+
+## Files
 - src/sykabelajar-v2/runtime/v2-runtime.js
 - src/sykabelajar-v2/styles/v2-runtime.css
 
-Do not upload dist/.
-Commit this batch after extracting it over the existing UI batch.
-Then wait for GitHub Actions.
+## Install
+Extract and upload only these two files, preserving paths. Do not upload dist/. Commit to main and wait for Actions.
