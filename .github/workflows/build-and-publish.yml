@@ -89,6 +89,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          REMOTE_SHA="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [[ "$REMOTE_SHA" != "${GITHUB_SHA}" ]]; then
+            echo "Source branch advanced during this build; skipping publish so the newest run can publish current assets."
+            echo "expected=${GITHUB_SHA} remote=${REMOTE_SHA}"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           git add -A dist
 
           if git diff --cached --quiet; then
@@ -132,7 +140,7 @@ jobs:
           {
             echo "## Sykabelajar frontend release"
             echo
-            echo "- Source commit: \\`${GITHUB_SHA}\\`"
+            echo "- Source commit: ${GITHUB_SHA}"
             echo "- Stable loader: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/dist/loader.js"
             echo "- Source-of-truth manifest: https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/dist/manifest.json"
             echo "- Fingerprinted assets are generated from content hashes."
