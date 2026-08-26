@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Verify source integrity
+        run: node build/source-integrity.mjs
+
       - name: Install dependencies
         if: hashFiles('package-lock.json') != ''
         run: npm ci
@@ -149,4 +152,5 @@ jobs:
             echo "- Fingerprinted assets are generated from content hashes."
             echo "- loader.js contains no hard-coded asset filenames."
             echo "- Production preflight validates JS syntax and rejects known Bolt demo identities."
+            echo "- Source integrity is checked before build to prevent stale/baseline fallback publication."
           } >> "$GITHUB_STEP_SUMMARY"
