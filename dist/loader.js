@@ -29,8 +29,6 @@
     });
   }
 
-  function loadModule(url) { return import(url); }
-
   function applyConfig(manifest){
     window.__SYKA_RELEASE__ = manifest;
     window.SYKA_CONFIG = window.SYKA_CONFIG || {};
@@ -52,12 +50,12 @@
 
       return loadCss((manifest.base || BASE) + '/' + manifest.styles)
         .then(function(){ return loadScript((manifest.base || BASE) + '/' + manifest.vendor); })
-        .then(function(){ return loadScript((manifest.base || BASE) + '/' + manifest.app); })
-        .then(function(){ if (!manifest.v2 || !manifest.v2.entry) return null; return loadModule((manifest.base || BASE) + '/' + manifest.v2.entry + '?cb=' + CACHE_BUSTER).then(function(v2){ window.SYKA_V2 = v2; return v2; }); });
+        .then(function(){ return loadScript((manifest.base || BASE) + '/' + manifest.app); });
     })
     .then(function(){
       if (window.SYKA_APP && typeof window.SYKA_APP.init === 'function') {
-        return Promise.resolve(window.SYKA_APP.init()).then(function(){ if (window.SYKA_CONFIG && window.SYKA_CONFIG.ENABLE_V2 === true && window.SYKA_V2?.startSykabelajarV2) return window.SYKA_V2.startSykabelajarV2({ mode: 'incremental' }); });
+        window.SYKA_APP.init();
+        return;
       }
       throw new Error('SYKA_APP.init() tidak ditemukan setelah release bundle dimuat.');
     })

@@ -134,8 +134,6 @@
     APP_PAGE: '/p/app.html',
 
     ASSET_BASE_URL: 'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist',
-    // Phase 13 keeps the legacy UI as default. Set true only when rolling out V2 routing.
-    ENABLE_V2: false,
 
     SUPABASE_URL: 'https://jrfogwueytiddnanetth.supabase.co',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_H3zjdAEE-ItQ08YRj8MieQ_kNMcsAHa',
@@ -196,16 +194,6 @@
       }
     }
 
-    async function activateV2(manifest, assetBase) {
-      if (!window.SYKA_CONFIG || window.SYKA_CONFIG.ENABLE_V2 !== true) return;
-      if (!manifest.v2 || !manifest.v2.entry) return;
-      var v2 = await import(assetBase + '/' + manifest.v2.entry + '?cb=' + CACHE_BUST);
-      window.SYKA_V2 = v2;
-      if (typeof v2.startSykabelajarV2 === 'function') {
-        await v2.startSykabelajarV2({ mode: 'incremental' });
-      }
-    }
-
     async function boot() {
       window.SYKA_CONFIG = window.SYKA_CONFIG || {};
       window.SYKA_CONFIG.ASSET_BASE_URL = BASE;
@@ -247,7 +235,6 @@
         );
 
         startApp();
-        await activateV2(manifest, assetBase);
       } catch (error) {
         console.error('[Sykabelajar] Release manifest boot failed:', error);
 
