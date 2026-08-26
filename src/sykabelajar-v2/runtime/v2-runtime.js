@@ -112,6 +112,8 @@
     document.documentElement.dataset.sykabelajar='v2';
     document.documentElement.dataset.sykaV2Theme=theme();
     const root=document.getElementById('page-root');if(!root)return;
+    root.setAttribute('aria-busy','true');
+    root.innerHTML='<div class="v2-route-loading"><div class="v2-route-spinner"></div><span>Memuat Sykabelajar…</span></div>';
     const p=currentRoute();
     if(p==='/') root.innerHTML=await landing();
     else if(p==='/login'||p==='/register') root.innerHTML=await authPage(p.slice(1));
@@ -124,6 +126,7 @@
       root.innerHTML=await shell(`<section class="v2-dashboard"><span class="v2-kicker">COMPETITION</span><h1>Kompetisi Terbaru</h1><p class="v2-muted">Temukan uji kompetensi yang sedang dibuka.</p><div class="v2-comp-grid">${rows.map(c=>`<article class="v2-comp-card"><div class="v2-comp-cover"></div><div class="v2-comp-body"><span class="v2-chip">${esc(c.category||'Kompetisi')}</span><h3>${esc(c.title||c.name||'Kompetisi')}</h3><p>${esc(c.description||'Uji kemampuanmu dan raih prestasi.')}</p><div class="v2-comp-meta"><strong>${Number(c.participants||0).toLocaleString('id-ID')} peserta</strong><button data-v2-route="/student">Ikuti</button></div></div></article>`).join('')}</div></section>`,p);
     } else root.innerHTML=await shell(`<section class="v2-dashboard"><span class="v2-kicker">SYKABELAJAR V2</span><h1>Halaman siap dikembangkan</h1><p class="v2-muted">Route ini tetap berjalan pada V2 shell.</p></section>`,p);
     bind();
+    root.setAttribute('aria-busy','false');
   }
 
   window.addEventListener('popstate',start);
