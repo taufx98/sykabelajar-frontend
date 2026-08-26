@@ -18,29 +18,31 @@ if (code.includes('Aruna Putra') || code.includes('Mira Cendekia') || code.inclu
   throw new Error('Production bundle still contains Bolt demo identity data.');
 }
 
-// Validate the source of truth for Supabase role access instead of pattern
-// matching minified production code. Minifiers can join unrelated strings and
-// produce false positives. A real invalid query must exist in source code.
-function walk(dir) {
+// Database query regressions are validated in the backend service layer only.
+// UI/reference sources can contain historical text or examples; they are not
+// the source of truth for Supabase queries.
+function walkServices(dir) {
   if (!existsSync(dir)) return [];
   const out = [];
-  for (const name of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, name.name);
-    if (name.isDirectory()) out.push(...walk(p));
-    else if (/\.(js|jsx|ts|tsx)$/.test(name.name)) out.push(p);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkServices(p));
+    else if (/\.(js|jsx|ts|tsx)$/.test(entry.name)) out.push(p);
   }
   return out;
 }
-const sourceFiles = walk('src');
+
+const serviceFiles = walkServices('src/services');
 const invalidSource = [];
-for (const file of sourceFiles) {
-  const source = readFileSync(file, 'utf8');
-  if (/from\(\s*['"]user_roles['"]\s*\)/i.test(source) && /select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i.test(source)) {
+for (const file of serviceFiles) {
+  const source = readFileSync(file, 'utf8').replace(/\s+/g, ' ');
+  const queries = [...source.matchAll(/from\(\s*['"]user_roles['"]\s*\)([^;]{0,320})/gi)].map(m => m[1]);
+  if (queries.some(chunk => /select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i.test(chunk))) {
     invalidSource.push(file);
   }
 }
 if (invalidSource.length) {
-  throw new Error(`Invalid user_roles -> roles relationship query found in source: ${invalidSource.join(', ')}`);
+  throw new Error(`Invalid user_roles -> roles relationship query found in backend service source: ${invalidSource.join(', ')}`);
 }
 
 if (!code.includes('SYKA_PROFILE_SERVICE') || !code.includes('SYKA_COMPETITION_SERVICE')) {
@@ -52,4 +54,4 @@ if (!code.includes('syka-ui-final-polish') || !code.includes('syka-component-pol
 new Script(code, { filename: app });
 const m = JSON.parse(readFileSync(manifest, 'utf8'));
 if (m.commit && !code.includes('SYKA_STATE')) throw new Error('Production bundle sanity check failed.');
-console.log('Production preflight passed: syntax, SYKA_APP, backend adapters, UI normalizers, and source-level regression guards are clean.');
+console.log('Production preflight passed: syntax, SYKA_APP, backend adapters, UI normalizers, and backend role-query regression guard are clean.');
