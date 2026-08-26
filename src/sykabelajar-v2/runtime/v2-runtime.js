@@ -230,6 +230,103 @@
     return `<section class="v2-dashboard"><span class="v2-kicker">COMMUNITY</span><h1>Community Feed</h1><p class="v2-muted">Diskusi dan aktivitas komunitas.</p>${posts.length?`<div class="v2-feed">${posts.map(p=>`<article class="v2-post"><div class="v2-post-head"><span class="v2-avatar">${esc((p.author_name||p.user_name||'U').slice(0,1).toUpperCase())}</span><div><strong>${esc(p.author_name||p.user_name||'Pengguna')}</strong><small>${esc(p.created_at||'')}</small></div></div><p>${esc(p.content||p.body||p.text||'')}</p><div class="v2-post-actions"><button type="button">Like</button><button type="button">Komentar</button><button type="button">Bagikan</button></div></article>`).join('')}</div>`:'<div class="v2-empty-panel">Belum ada posting terbaru.</div>'}</section>`;
   }
 
+
+  async function dataCount(table, filters={}){
+    try{
+      let q=supa().from(table).select('id',{count:'exact',head:true});
+      Object.entries(filters).forEach(([k,v])=>{q=q.eq(k,v)});
+      const r=await q; return r?.count||0;
+    }catch(_){return 0}
+  }
+
+  async function certificatePage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    const count=await dataCount('certificates',{user_id:s.user.id});
+    return `<section class="v2-dashboard"><span class="v2-kicker">CERTIFICATE</span><h1>Sertifikat Saya</h1><p class="v2-muted">Sertifikat digital yang terhubung dengan prestasi akunmu.</p><div class="v2-stat-grid"><div><small>Total</small><strong>${count}</strong></div><div><small>Verification</small><strong>Public</strong></div><div><small>Trust</small><strong>RLS</strong></div><div><small>Status</small><strong>Ready</strong></div></div><div class="v2-panel"><h3>Verification</h3><p>Public verification menggunakan tabel certificate_verifications dan asset existing.</p>${button('/verify','Buka verifikasi','outline')}</div></section>`;
+  }
+
+  async function gamificationPage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    const [xp,coin,ach,awards,tasks]=await Promise.all([
+      (async()=>{try{const r=await supa().from('xp_ledger').select('amount').eq('user_id',s.user.id);return (r.data||[]).reduce((a,b)=>a+Number(b.amount||0),0)}catch(_){return 0}})(),
+      (async()=>{try{const r=await supa().from('edu_coin_ledger').select('amount').eq('user_id',s.user.id);return (r.data||[]).reduce((a,b)=>a+Number(b.amount||0),0)}catch(_){return 0}})(),
+      dataCount('user_achievements',{user_id:s.user.id}),
+      dataCount('awards',{user_id:s.user.id}),
+      dataCount('daily_task_claims',{user_id:s.user.id})
+    ]);
+    return `<section class="v2-dashboard"><span class="v2-kicker">GAMIFICATION</span><h1>Prestasi & Progress</h1><p class="v2-muted">Semua poin dan pencapaian dari sistem existing Sykabelajar.</p><div class="v2-stat-grid"><div><small>XP</small><strong>${xp}</strong></div><div><small>Edu Coin</small><strong>${coin}</strong></div><div><small>Achievement</small><strong>${ach}</strong></div><div><small>Awards</small><strong>${awards}</strong></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('spark')}</div><h3>Daily Tasks</h3><p>${tasks} task telah diklaim.</p>${button('/daily-tasks','Buka daily task')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('award')}</div><h3>Achievements</h3><p>Badge dan achievement akunmu.</p></article><article class="v2-panel"><div class="v2-panel-icon">${icon('trophy')}</div><h3>Awards</h3><p>Penghargaan kompetisi yang telah diperoleh.</p></article></div></section>`;
+  }
+
+  async function notificationPage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let rows=[];
+    try{const r=await supa().from('notifications').select('*').order('created_at',{ascending:false}).limit(20);rows=r.data||[]}catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">NOTIFICATIONS</span><h1>Notifikasi</h1><p class="v2-muted">Update kompetisi, achievement, dan aktivitas akun.</p><div class="v2-feed">${rows.length?rows.map(n=>`<article class="v2-post"><strong>${esc(n.title||'Notifikasi')}</strong><p>${esc(n.body||n.message||'')}</p><small>${esc(n.created_at||'')}</small></article>`).join(''):'<div class="v2-empty-panel">Belum ada notifikasi.</div>'}</div></section>`;
+  }
+
+  async function dailyTaskPage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let tasks=[],claims=0;
+    try{
+      const c=supa();const [t,cl]=await Promise.all([
+        c.from('daily_tasks').select('*').limit(12),
+        c.from('daily_task_claims').select('id',{count:'exact',head:true}).eq('user_id',s.user.id)
+      ]);
+      tasks=t.data||[];claims=cl.count||0;
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">DAILY TASKS</span><h1>Daily Tasks</h1><p class="v2-muted">Aktivitas singkat untuk membangun streak dan XP.</p><div class="v2-stat-grid"><div><small>Available</small><strong>${tasks.length}</strong></div><div><small>Claimed</small><strong>${claims}</strong></div><div><small>Streak</small><strong>7</strong></div><div><small>Reward</small><strong>XP</strong></div></div><div class="v2-panel-grid">${(tasks.length?tasks:[{title:'Daily Quiz',description:'Kerjakan kuis harian dan klaim XP.'},{title:'Read & Reflect',description:'Selesaikan aktivitas refleksi hari ini.'}]).map(t=>`<article class="v2-panel"><div class="v2-panel-icon">${icon('spark')}</div><h3>${esc(t.title||t.name||'Daily Task')}</h3><p>${esc(t.description||'Aktivitas harian Sykabelajar.')}</p><button class="v2-btn outline" type="button">Lihat task</button></article>`).join('')}</div></section>`;
+  }
+
+  async function marketplacePage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let products=[],orders=0,ents=0;
+    try{
+      const c=supa();const [p,o,e]=await Promise.all([
+        c.from('commerce_products').select('*').limit(12),
+        c.from('orders').select('id',{count:'exact',head:true}).eq('user_id',s.user.id),
+        c.from('user_product_entitlements').select('id',{count:'exact',head:true}).eq('user_id',s.user.id)
+      ]);
+      products=p.data||[];orders=o.count||0;ents=e.count||0;
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">MARKETPLACE</span><h1>Store</h1><p class="v2-muted">Produk edukasi dan benefit digital.</p><div class="v2-stat-grid"><div><small>Products</small><strong>${products.length}</strong></div><div><small>Orders</small><strong>${orders}</strong></div><div><small>Entitlements</small><strong>${ents}</strong></div><div><small>Payment</small><strong>Secure</strong></div></div><div class="v2-comp-grid">${(products.length?products:[{name:'Edu Bundle',description:'Benefit digital untuk perjalanan belajar.'},{name:'Achievement Pack',description:'Paket benefit dan badge.'}]).map(p=>`<article class="v2-comp-card"><div class="v2-comp-cover"></div><div class="v2-comp-body"><span class="v2-chip">PRODUCT</span><h3>${esc(p.name||p.title||'Product')}</h3><p>${esc(p.description||'Benefit edukasi Sykabelajar.')}</p><div class="v2-comp-meta"><strong>${esc(String(p.price||'—'))}</strong><button class="v2-card-link" type="button">Lihat</button></div></div></article>`).join('')}</div></section>`;
+  }
+
+  async function profilePage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let p=null,settings=null;
+    try{
+      const c=supa();const [pr,us]=await Promise.all([
+        c.from('profiles').select('*').eq('id',s.user.id).single(),
+        c.from('user_settings').select('*').eq('user_id',s.user.id).maybeSingle()
+      ]);
+      p=pr.data;settings=us.data;
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">PROFILE</span><h1>${esc(p?.full_name||p?.name||s.user.email||'Profile')}</h1><p class="v2-muted">Profil dan preferensi pengguna dari backend existing.</p><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('user')}</div><h3>Identity</h3><p>Email: ${esc(s.user.email||'')}</p><p>Username: ${esc(p?.username||'—')}</p></article><article class="v2-panel"><div class="v2-panel-icon">${icon('shield')}</div><h3>Settings</h3><p>Settings record: ${settings?'available':'not set'}</p></article><article class="v2-panel"><div class="v2-panel-icon">${icon('spark')}</div><h3>Security</h3><p>Session dan authorization tetap melalui Supabase Auth + RLS.</p></article></div></section>`;
+  }
+
+  async function referralPage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let code=null,events=0;
+    try{
+      const c=supa();const [cc,ev]=await Promise.all([
+        c.from('referral_codes').select('*').eq('user_id',s.user.id).limit(1).maybeSingle(),
+        c.from('referral_events').select('id',{count:'exact',head:true}).eq('referrer_user_id',s.user.id)
+      ]);
+      code=cc.data;events=ev.count||0;
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">REFERRAL</span><h1>Referral</h1><p class="v2-muted">Ajak teman dan lihat aktivitas referral.</p><div class="v2-stat-grid"><div><small>Code</small><strong>${esc(code?.code||'—')}</strong></div><div><small>Events</small><strong>${events}</strong></div><div><small>Status</small><strong>Active</strong></div><div><small>Reward</small><strong>Edu Coin</strong></div></div></section>`;
+  }
+
+  async function verifyPage(){
+    return `<section class="v2-auth"><div class="v2-auth-card"><span class="v2-kicker">PUBLIC VERIFICATION</span><h1>Verifikasi Sertifikat</h1><p>Masukkan kode sertifikat untuk memeriksa keaslian melalui certificate_verifications.</p><label>Kode verifikasi<input id="v2-verify-code" placeholder="Contoh: SYKA-2026-XXXX"></label><button class="v2-btn primary big full" type="button">Verifikasi</button><div class="v2-muted" style="margin-top:12px;font-size:11px">Verification akan memakai service existing saat modul verify diaktifkan.</div></div></section>`;
+  }
+
+  async function storeOrderPage(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    const count=await dataCount('orders',{user_id:s.user.id});
+    return `<section class="v2-dashboard"><span class="v2-kicker">ORDERS</span><h1>Pesanan Saya</h1><p class="v2-muted">Riwayat order dari commerce system existing.</p><div class="v2-stat-grid"><div><small>Total</small><strong>${count}</strong></div><div><small>Payment</small><strong>Intent</strong></div><div><small>Shipment</small><strong>—</strong></div><div><small>Entitlement</small><strong>Auto</strong></div></div></section>`;
+  }
+
   async function start(){
     document.documentElement.dataset.sykabelajar='v2';
     document.documentElement.dataset.sykaV2Theme=theme();
@@ -239,7 +336,16 @@
     const p=currentRoute();
     if(p==='/') root.innerHTML=await landing();
     else if(p==='/login'||p==='/register') root.innerHTML=await authPage(p.slice(1));
-    else if(p==='/student'||p==='/dashboard'||p==='/profile'||p.startsWith('/student/')) root.innerHTML=await shell(await studentContent(),p);
+    else if(p==='/student'||p==='/dashboard'||p.startsWith('/student/')) root.innerHTML=await shell(await studentContent(),p);
+    else if(p==='/profile') root.innerHTML=await shell(await profilePage(),p);
+    else if(p==='/prestasi'||p==='/gamification') root.innerHTML=await shell(await gamificationPage(),p);
+    else if(p==='/certificates') root.innerHTML=await shell(await certificatePage(),p);
+    else if(p==='/notifications') root.innerHTML=await shell(await notificationPage(),p);
+    else if(p==='/daily-tasks') root.innerHTML=await shell(await dailyTaskPage(),p);
+    else if(p==='/store'||p==='/marketplace') root.innerHTML=await shell(await marketplacePage(),p);
+    else if(p==='/orders') root.innerHTML=await shell(await storeOrderPage(),p);
+    else if(p==='/referral') root.innerHTML=await shell(await referralPage(),p);
+    else if(p==='/verify') root.innerHTML=await verifyPage();
     else if(p==='/organizer'||p.startsWith('/organizer/')) root.innerHTML=await shell(await genericRoleContent('organizer'),p);
     else if(p==='/admin'||p.startsWith('/admin/')) root.innerHTML=await shell(await genericRoleContent('admin'),p);
     else if(p.startsWith('/competition/')){ const id=decodeURIComponent(p.split('/')[2]||''); root.innerHTML=await shell(await competitionDetail(id),p); }
