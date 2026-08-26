@@ -1,14 +1,14 @@
 {
   "schema": 2,
-  "version": "4.14.0-v2-takeover",
+  "version": "4.15.0-bolt-ui",
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.f5cbd7823b5f.min.js",
+  "app": "app.2b3c41ad007d.min.js",
   "styles": "styles.c60daf09b09d.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "c2a043cadfcdbe2ddafd922a248873905040236c",
-  "generatedAt": "2026-08-27T01:33:33+07:00",
+  "commit": "6ee9eae5d40bf3840bbd7ee7731c7bd9f1f823cf",
+  "generatedAt": "2026-08-27T01:38:57+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
