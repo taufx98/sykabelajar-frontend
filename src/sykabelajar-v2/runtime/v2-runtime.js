@@ -1,156 +1,131 @@
-(function () {
-  const V2_PREFIX = '__SYKA_V2_ACTIVE__';
-  const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  const routePath = () => window.SYKA_UTILS?.routePath?.() || '/';
-  const client = () => window.SYKA_SUPABASE?.get?.();
-  const isV2Route = (route) => /^\/(login|register|student|dashboard|profile|organizer|admin|competitions|competition)(\/|$)/.test(route) || route === '/' || route === '/home';
-  const getRole = async (userId) => {
-    try {
-      const result = await client().from('user_roles').select('role_id, roles(name)').eq('user_id', userId);
-      const role = result?.data?.[0]?.roles?.name || result?.data?.[0]?.role || 'student';
-      return String(role).toLowerCase();
-    } catch (_) { return 'student'; }
-  };
-  const ensureRoot = () => document.getElementById('page-root');
-  const navigate = (route) => {
-    const cfg = window.SYKA_CONFIG || {};
-    const u = new URL(window.location.href);
-    u.pathname = cfg.APP_PAGE || '/';
-    u.search = '';
-    u.hash = '';
-    u.searchParams.set('route', route);
-    history.pushState({}, '', u.pathname + u.search);
-    renderCurrent();
-  };
-  const layout = (content, opts = {}) => `
-    <div class="sy-v2-shell">
-      <nav class="sy-v2-nav">
-        <div class="sy-v2-brand"><button class="sy-v2-ghost" data-route="/">SYKA<span>belajar</span></button></div>
-        <div class="sy-v2-navlinks">
-          <button data-route="/competitions">Kompetisi</button>
-          <button data-route="/student">Belajar</button>
-          <button data-route="/organizer">Organizer</button>
-        </div>
-        <div class="sy-v2-actions">${opts.authenticated ? '<button class="sy-v2-btn secondary" data-route="/student">Dashboard</button>' : '<button class="sy-v2-btn secondary" data-route="/login">Masuk</button>'}<button class="sy-v2-btn primary" data-route="/register">Daftar</button></div>
-      </nav>
-      <main class="sy-v2-container">${content}</main>
-      <footer class="sy-v2-footer"><div class="sy-v2-container">Sykabelajar · Platform kompetisi dan edukasi</div></footer>
-    </div>`;
-  const bind = () => {
-    document.querySelectorAll('[data-route]').forEach((el) => el.addEventListener('click', () => navigate(el.dataset.route)));
-    document.querySelectorAll('[data-action="login"]').forEach((el) => el.addEventListener('click', () => navigate('/login')));
-  };
-  const render = (html, opts) => { const root = ensureRoot(); if (!root) return; root.innerHTML = layout(html, opts); bind(); };
-  const getSession = async () => { try { return await window.SYKA_AUTH_SERVICE?.getSession?.(); } catch (_) { return null; } };
+(function(){
+  if(window.SYKA_V2_RUNTIME)return;
 
-  async function landing() {
-    let slides = [], competitions = [];
-    try {
-      const c = client();
-      const [s, comp] = await Promise.all([
-        c.from('home_slides').select('*').order('sort_order', { ascending: true }).limit(5),
-        c.from('competitions').select('*').order('created_at', { ascending: false }).limit(6)
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const currentRoute=()=>new URLSearchParams(location.search).get('route')||'/';
+  const supa=()=>window.SYKA_SUPABASE?.get?.();
+  const auth=()=>window.SYKA_AUTH_SERVICE;
+  const theme=()=>localStorage.getItem('syka-v2-theme')||'dark';
+
+  const iconMap={
+    home:'M3 10 12 3l9 7v11H3z',
+    trophy:'M7 4h10v6a5 5 0 0 1-10 0z M4 6H2v2a4 4 0 0 0 4 4 M20 6h2v2a4 4 0 0 1-4 4 M9 21h6 M12 15v6',
+    chart:'M4 19V5 M4 19h16 M8 16v-4 M12 16V8 M16 16v-6',
+    award:'M12 3a5 5 0 1 0 0 10a5 5 0 0 0 0-10 M9 13l-1 8 4-2 4 2-1-8',
+    shield:'M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6z M9 12l2 2 4-4',
+    search:'M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 0 0 0-13 M16 16l5 5',
+    sun:'M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4 M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8',
+    moon:'M20 15.5A8 8 0 0 1 8.5 4A8 8 0 1 0 20 15.5',
+    user:'M12 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8 M4 21a8 8 0 0 1 16 0',
+    logout:'M10 17l5-5-5-5 M15 12H3 M19 4v16',
+    spark:'M12 3l1.4 5.6L19 10l-5.6 1.4L12 17l-1.4-5.6L5 10l5.6-1.4z'
+  };
+  const icon=n=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${iconMap[n]||''}"/></svg>`;
+
+  async function getSession(){try{return await auth()?.getSession?.()}catch(_){return null}}
+  async function getRole(uid){
+    try{
+      const q=await supa()?.from('user_roles').select('roles(name)').eq('user_id',uid).limit(1);
+      return String(q?.data?.[0]?.roles?.name||'student').toLowerCase();
+    }catch(_){return 'student'}
+  }
+
+  function setTheme(mode){localStorage.setItem('syka-v2-theme',mode);document.documentElement.dataset.sykaV2Theme=mode}
+  function toggleTheme(){setTheme(localStorage.getItem('syka-v2-theme')==='light'?'dark':'light');start()}
+  function navigate(route){const u=new URL(location.href);u.searchParams.set('route',route);history.pushState({},'',u.pathname+'?'+u.searchParams.toString());start()}
+  function button(route,label,cls='primary'){return `<button class="v2-btn ${cls}" data-v2-route="${route}">${label}</button>`}
+  function brand(){return `<button class="v2-brand" data-v2-route="/"><span class="v2-brand-mark">${icon('trophy')}</span><span>sykabelajar<span class="v2-brand-accent">.id</span></span></button>`}
+
+  function bind(){
+    document.querySelectorAll('[data-v2-route]').forEach(el=>el.onclick=()=>navigate(el.dataset.v2Route));
+    document.querySelectorAll('[data-v2-theme]').forEach(el=>el.onclick=toggleTheme);
+    document.querySelectorAll('[data-v2-logout]').forEach(el=>el.onclick=async()=>{try{await auth()?.signOut?.()}catch(_){}navigate('/')});
+  }
+
+  async function landing(){
+    let comps=[];
+    try{const q=await supa()?.from('competitions').select('*').order('created_at',{ascending:false}).limit(6);comps=q?.data||[]}catch(_){}
+    if(!comps.length)comps=[
+      {title:'Uji Kompetensi Matematika Nasional 2026',category:'Matematika',participants:2840},
+      {title:'Karya Tulis Ilmiah Sains Muda 2026',category:'Sains & IPA',participants:1120},
+      {title:'Coding Pemula: Web Kita',category:'Teknologi',participants:680}
+    ];
+
+    const cards=comps.map(c=>`<article class="v2-comp-card"><div class="v2-comp-cover"></div><div class="v2-comp-body"><span class="v2-chip">${esc(c.category||'Kompetisi')}</span><h3>${esc(c.title||c.name||'Kompetisi')}</h3><p>${esc(c.description||'Uji kompetensi, raih prestasi, dan bangun profilmu.')}</p><div class="v2-comp-meta"><strong>+${Number(c.points||300)} XP</strong><span>${Number(c.participants||0).toLocaleString('id-ID')} peserta</span></div></div></article>`).join('');
+
+    return `<div class="v2-landing">
+      <header class="v2-landing-nav"><div class="v2-container">${brand()}<nav><button data-v2-route="/lomba">Kompetisi</button><button data-v2-route="/student">Belajar</button><button data-v2-route="/organizer">Organizer</button></nav><div class="v2-nav-actions"><button class="v2-icon" data-v2-theme>${theme()==='dark'?icon('sun'):icon('moon')}</button>${button('/login','Masuk','ghost')}${button('/register','Daftar Gratis')}</div></div></header>
+      <section class="v2-hero"><div class="v2-container v2-hero-grid"><div><span class="v2-kicker">${icon('spark')} Platform Uji Kompetensi Nasional Non-Formal</span><h1>Belajar Jadi Seru,<br><span class="v2-gradient">Uji Kompetensi Setiap Hari</span></h1><p>Ikuti uji kompetensi, kumpulkan XP, naikkan peringkat, dan bangun portofolio prestasi yang bisa diverifikasi publik.</p><div class="v2-actions">${button('/register','Mulai Sekarang — Gratis','primary big')}${button('/lomba','Jelajahi Kompetisi','outline big')}</div><div class="v2-metrics"><div><strong>12,000+</strong><span>Peserta aktif</span></div><div><strong>150+</strong><span>Uji kompetensi</span></div><div><strong>8,500+</strong><span>Sertifikat</span></div></div></div><div class="v2-hero-board"><div class="v2-board-title">${icon('chart')} Papan Peringkat <span>LIVE</span></div>${['Aruna Putra','Mira Cendekia','Bagaskara Wibawa','Larasati Ayu','Dimas Pratama'].map((n,i)=>`<div class="v2-board-row"><b>${i+1}</b><span class="v2-mini-avatar">${n.slice(0,2)}</span><div><strong>${n}</strong><small>${['SMP Negeri 1 Bandung','MTs Negeri 2 Jakarta','SMA Negeri 8 Surabaya','SMP Negeri 3 Yogyakarta','SMA Negeri 5 Malang'][i]}</small></div><em>${[4820,9100,8450,7320,6810][i]}</em></div>`).join('')}</div></div></section>
+      <section class="v2-section"><div class="v2-container"><div class="v2-section-head"><div><h2>Uji Kompetensi Unggulan</h2><p>Mulai perjalananmu dari kompetisi pilihan ini.</p></div><button data-v2-route="/lomba">Lihat semua</button></div><div class="v2-comp-grid">${cards}</div></div></section>
+      <section class="v2-section"><div class="v2-container"><div class="v2-center-head"><h2>Kenapa sykabelajar.id?</h2><p>Satu ekosistem untuk kompetisi, pembelajaran, dan prestasi.</p></div><div class="v2-why-grid">${[['trophy','Uji Kompetensi','Ratusan kompetisi dari berbagai jenjang dan bidang.'],['spark','Daily Tasks','Bangun kebiasaan belajar lewat streak dan XP.'],['chart','Leaderboard','Pantau progres dan bersaing secara real-time.'],['award','Sertifikat','Prestasi digital yang dapat diverifikasi publik.'],['shield','Trust Layer','Kode unik menjaga keaslian sertifikat.'],['spark','Gamifikasi','XP, Edu Coin, badge, achievement, dan reward.']].map(([i,t,d])=>`<article class="v2-why-card"><div class="v2-why-icon">${icon(i)}</div><h3>${t}</h3><p>${d}</p></article>`).join('')}</div></div></section>
+      <section class="v2-section"><div class="v2-container"><div class="v2-cta"><h2>Siap beruji kompetensi?</h2><p>Gabung dan mulai membangun prestasi digitalmu bersama Sykabelajar.</p><div class="v2-actions center">${button('/register','Daftar Sekarang','primary big')}${button('/login','Saya sudah punya akun','outline big')}</div></div></div></section>
+      <footer class="v2-footer"><div class="v2-container">sykabelajar.id · Platform Uji Kompetensi Nasional Non-Formal</div></footer>
+    </div>`
+  }
+
+  async function authPage(mode){
+    const reg=mode==='register';
+    return `<section class="v2-auth"><div class="v2-auth-card">${brand()}<span class="v2-kicker">SYKABELAJAR</span><h1>${reg?'Buat akun baru':'Selamat datang kembali'}</h1><p>${reg?'Mulai perjalanan belajar dan kompetisimu.':'Masuk untuk melanjutkan progresmu.'}</p><form id="v2-auth-form">${reg?'<label>Nama lengkap<input id="v2-name" required></label><label>Username<input id="v2-username" required></label>':''}<label>Email<input id="v2-email" type="email" required></label><label>Password<input id="v2-password" type="password" minlength="8" required></label><button class="v2-btn primary big full" type="submit">${reg?'Buat akun':'Masuk'}</button></form><div id="v2-auth-feedback"></div><p class="v2-switch">${reg?'Sudah punya akun?':'Belum punya akun?'} <button data-v2-route="/${reg?'login':'register'}">${reg?'Masuk':'Daftar'}</button></p></div></section>`;
+  }
+
+  async function studentContent(){
+    const s=await getSession();if(!s){navigate('/login');return ''}
+    let p=null,xp=0,coins=0,ach=0;
+    try{
+      const c=supa();
+      const [pr,x,ec,a]=await Promise.all([
+        c.from('profiles').select('*').eq('id',s.user.id).single(),
+        c.from('xp_ledger').select('amount').eq('user_id',s.user.id),
+        c.from('edu_coin_ledger').select('amount').eq('user_id',s.user.id),
+        c.from('user_achievements').select('id',{count:'exact',head:true}).eq('user_id',s.user.id)
       ]);
-      slides = s.data || []; competitions = comp.data || [];
-    } catch (_) {}
-    render(`
-      <section class="sy-v2-hero"><div class="sy-v2-hero-grid"><div><span class="sy-v2-kicker">PLATFORM KOMPETISI & EDUKASI</span><h1 class="sy-v2-title">Belajar. Bertanding. Berkembang.</h1><p class="sy-v2-lead">Temukan kompetisi, bangun prestasi, kumpulkan XP, raih achievement, dan buktikan perjalanan belajarmu dalam satu ekosistem.</p><div class="sy-v2-actions"><button class="sy-v2-btn primary" data-route="/register">Mulai Sekarang</button><button class="sy-v2-btn secondary" data-route="/competitions">Lihat Kompetisi</button></div></div><div class="sy-v2-panel"><div class="sy-v2-muted">Kompetisi terbaru</div><h3>${escapeHtml(competitions[0]?.title || competitions[0]?.name || 'Kompetisi Sykabelajar')}</h3><p class="sy-v2-muted">${escapeHtml(competitions[0]?.description || 'Ikuti event edukasi yang sedang dibuka.')}</p><div class="sy-v2-meta"><span class="sy-v2-chip">Competition</span><span class="sy-v2-chip">Certificate</span></div></div></div></section>
-      <section class="sy-v2-section"><h2>Kompetisi Terbaru</h2><div class="sy-v2-grid">${competitions.length ? competitions.map((x) => `<article class="sy-v2-card"><h3>${escapeHtml(x.title || x.name || 'Kompetisi')}</h3><p class="sy-v2-muted">${escapeHtml(x.description || x.summary || 'Kompetisi edukasi Sykabelajar.')}</p><div class="sy-v2-meta"><span class="sy-v2-chip">${escapeHtml(x.status || 'published')}</span><button class="sy-v2-btn secondary" data-route="/competitions">Detail</button></div></article>`).join('') : '<div class="sy-v2-empty">Belum ada kompetisi aktif.</div>'}</div></section>
-      ${slides.length ? `<section class="sy-v2-section"><h2>Highlight</h2><div class="sy-v2-grid">${slides.slice(0,3).map((x) => `<article class="sy-v2-card"><h3>${escapeHtml(x.title || x.heading || 'Sykabelajar')}</h3><p class="sy-v2-muted">${escapeHtml(x.subtitle || x.description || '')}</p></article>`).join('')}</div></section>` : ''}
-      <section class="sy-v2-section"><h2>Satu ekosistem untuk berkembang</h2><div class="sy-v2-grid"><article class="sy-v2-card"><h3>Competition</h3><p class="sy-v2-muted">Ikuti kompetisi dan ukur kemampuanmu.</p></article><article class="sy-v2-card"><h3>Achievement</h3><p class="sy-v2-muted">Kumpulkan XP, badge, dan penghargaan.</p></article><article class="sy-v2-card"><h3>Certificate</h3><p class="sy-v2-muted">Simpan bukti prestasi digitalmu.</p></article></div></section>
-      <section class="sy-v2-section"><div class="sy-v2-panel"><h2>Bangun kompetisimu sendiri</h2><p class="sy-v2-muted">Organizer dapat membuat event, mengelola peserta, dan menjalankan sistem kompetisi dalam satu workspace.</p><button class="sy-v2-btn primary" data-route="/organizer">Masuk sebagai Organizer</button></div></section>
-    `, { authenticated: !!(await getSession()) });
+      p=pr?.data;xp=(x?.data||[]).reduce((n,v)=>n+Number(v.amount||0),0);coins=(ec?.data||[]).reduce((n,v)=>n+Number(v.amount||0),0);ach=a?.count||0
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">STUDENT</span><h1>Halo, ${esc(p?.full_name||p?.name||s.user.email||'Student')}</h1><p class="v2-muted">Lanjutkan perjalanan belajar dan kompetisimu.</p><div class="v2-stat-grid"><div><small>XP</small><strong>${xp.toLocaleString('id-ID')}</strong></div><div><small>Edu Coin</small><strong>${coins.toLocaleString('id-ID')}</strong></div><div><small>Achievement</small><strong>${ach}</strong></div><div><small>Streak</small><strong>7 hari</strong></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('trophy')}</div><h3>Kompetisi</h3><p>Temukan kompetisi terbaru dan lanjutkan progresmu.</p>${button('/lomba','Buka kompetisi')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('award')}</div><h3>Prestasi</h3><p>Lihat achievement dan sertifikat digitalmu.</p>${button('/prestasi','Lihat prestasi','outline')}</article><article class="v2-panel"><div class="v2-panel-icon">${icon('spark')}</div><h3>Daily Task</h3><p>Bangun streak dan klaim XP harian.</p>${button('/daily-tasks','Buka daily task','outline')}</article></div></section>`;
   }
 
-  async function auth(mode) {
-    const title = mode === 'register' ? 'Buat akun Sykabelajar' : 'Masuk ke Sykabelajar';
-    const extra = mode === 'register' ? `<div class="sy-v2-field"><label>Tipe akun</label><select id="v2-account-type"><option value="student">Pelajar / Peserta</option><option value="teacher">Guru</option><option value="organizer">Penyelenggara</option></select></div><div class="sy-v2-field"><label>Nama lengkap</label><input id="v2-name" required></div><div class="sy-v2-field"><label>Username</label><input id="v2-username" required></div>` : '';
-    render(`<section class="sy-v2-form"><h1>${title}</h1><div id="v2-auth-feedback"></div><form id="v2-auth-form">${extra}<div class="sy-v2-field"><label>Email</label><input id="v2-email" type="email" required></div><div class="sy-v2-field"><label>Password</label><input id="v2-password" type="password" minlength="8" required></div>${mode==='register'?'<div class="sy-v2-field"><label>Sekolah / Institusi</label><input id="v2-institution"></div>':''}<button class="sy-v2-btn primary" type="submit">${mode==='register'?'Buat akun':'Masuk'}</button></form><p class="sy-v2-muted">${mode==='register'?'Sudah punya akun?':'Belum punya akun?'} <button class="sy-v2-ghost" data-route="/${mode==='register'?'login':'register'}">${mode==='register'?'Masuk':'Daftar'}</button></p></section>`, { authenticated:false });
-    const form = document.getElementById('v2-auth-form');
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault(); const btn = form.querySelector('button[type=submit]'); const feedback = document.getElementById('v2-auth-feedback'); btn.disabled = true;
-      try {
-        if (mode === 'login') {
-          await window.SYKA_AUTH_SERVICE.signIn({ email: document.getElementById('v2-email').value.trim(), password: document.getElementById('v2-password').value });
-          navigate('/student');
-        } else {
-          const type = document.getElementById('v2-account-type').value;
-          await window.SYKA_AUTH_SERVICE.signUp({ email: document.getElementById('v2-email').value.trim(), password: document.getElementById('v2-password').value, fullName: document.getElementById('v2-name').value.trim(), username: document.getElementById('v2-username').value.trim(), accountType:type, institution: document.getElementById('v2-institution').value.trim() });
-          feedback.innerHTML = '<div class="sy-v2-success">Akun berhasil dibuat. Silakan cek email bila verifikasi diperlukan.</div>';
-          btn.disabled = false;
-          return;
-        }
-      } catch (error) { feedback.innerHTML = `<div class="sy-v2-error">${escapeHtml(error.message || 'Autentikasi gagal.')}</div>`; }
-      btn.disabled = false;
-    });
+  async function genericRoleContent(kind){
+    const s=await getSession();if(!s){navigate('/login');return ''}
+    const r=await getRole(s.user.id);
+    if(kind==='organizer'&&!['organizer','admin'].includes(r)){navigate('/student');return ''}
+    if(kind==='admin'&&r!=='admin'){navigate('/student');return ''}
+    const label=kind==='organizer'?'ORGANIZER':'ADMIN';
+    const title=kind==='organizer'?'Organizer Workspace':'Admin Control Center';
+    const cards=kind==='organizer'
+      ? [['trophy','Competition Builder','Buat dan konfigurasi event kompetisi.','/organizer/competition-builder'],['user','Participants','Kelola peserta event.','/organizer/participants'],['chart','Question Bank','Kelola bank soal dan grading.','/organizer/question-bank']]
+      : [['user','User Management','Kelola akun pengguna.','/admin/users'],['shield','Feature Flags','Kontrol release dan fitur.','/admin/features'],['chart','Audit Logs','Periksa aktivitas platform.','/admin/audit']];
+    return `<section class="v2-dashboard"><span class="v2-kicker">${label}</span><h1>${title}</h1><p class="v2-muted">Workspace terintegrasi dengan sistem Sykabelajar yang sudah ada.</p><div class="v2-stat-grid"><div><small>Role</small><strong>${esc(r)}</strong></div><div><small>Status</small><strong>Active</strong></div><div><small>Workspace</small><strong>V2</strong></div><div><small>Security</small><strong>RLS</strong></div></div><div class="v2-panel-grid">${cards.map(([i,t,d,r])=>`<article class="v2-panel"><div class="v2-panel-icon">${icon(i)}</div><h3>${t}</h3><p>${d}</p>${button(r,t,'outline')}</article>`).join('')}</div></section>`;
   }
 
-  async function student() {
-    const session = await getSession(); if (!session) return navigate('/login');
-    const uid = session.user.id; let profile = null, achievements = [], xp = 0, coins = 0, registrations = [];
-    try {
-      const c = client();
-      const [p,a,x,co,r] = await Promise.all([
-        c.from('profiles').select('*').eq('id', uid).single(),
-        c.from('user_achievements').select('*').eq('user_id', uid),
-        c.from('xp_ledger').select('amount').eq('user_id', uid),
-        c.from('edu_coin_ledger').select('amount').eq('user_id', uid),
-        c.from('registrations').select('*').eq('user_id', uid).limit(6)
-      ]);
-      profile=p.data; achievements=a.data||[]; xp=(x.data||[]).reduce((s,i)=>s+Number(i.amount||0),0); coins=(co.data||[]).reduce((s,i)=>s+Number(i.amount||0),0); registrations=r.data||[];
-    } catch (_) {}
-    render(`<section class="sy-v2-dashboard"><h1>Halo, ${escapeHtml(profile?.full_name || profile?.name || session.user.email || 'Student')}</h1><p class="sy-v2-muted">Lanjutkan perjalanan belajar dan kompetisimu.</p><div class="sy-v2-statgrid"><div class="sy-v2-stat"><small>XP</small><strong>${xp}</strong></div><div class="sy-v2-stat"><small>Edu Coin</small><strong>${coins}</strong></div><div class="sy-v2-stat"><small>Achievement</small><strong>${achievements.length}</strong></div><div class="sy-v2-stat"><small>Kompetisi</small><strong>${registrations.length}</strong></div></div><section class="sy-v2-section"><h2>Aksi cepat</h2><div class="sy-v2-grid"><article class="sy-v2-card"><h3>Kompetisi</h3><p class="sy-v2-muted">Cari dan ikuti kompetisi terbaru.</p><button class="sy-v2-btn primary" data-route="/competitions">Buka Competition</button></article><article class="sy-v2-card"><h3>Profil</h3><p class="sy-v2-muted">Kelola profil dan pengaturan akun.</p></article><article class="sy-v2-card"><h3>Certificate</h3><p class="sy-v2-muted">Sertifikat prestasi digitalmu.</p></article></div></section></section>`, {authenticated:true});
+  async function shell(content, current){
+    const s=await getSession(), r=s?await getRole(s.user.id):'guest';
+    const items=[['/','home','Beranda'],['/lomba','trophy','Lomba'],['/juara','chart','Peringkat'],['/prestasi','award','Awards'],['/daily-tasks','spark','Daily Tasks']];
+    if(r==='organizer'||r==='admin')items.push(['/organizer','shield','Organizer']);
+    if(r==='admin')items.push(['/admin','shield','Admin']);
+    const sidebar=`<aside class="v2-sidebar">${brand()}<nav class="v2-nav">${items.map(([rr,i,t])=>`<button class="${current===rr?'active':''}" data-v2-route="${rr}">${icon(i)}<span>${t}</span></button>`).join('')}</nav><div class="v2-sidebar-bottom">${s?`<button class="v2-profile-card" data-v2-route="/profile"><span class="v2-avatar">${esc((s.user.email||'U')[0].toUpperCase())}</span><span><strong>${esc(s.user.email||'Pengguna')}</strong><small>${esc(r)}</small></span></button><button class="v2-nav-plain" data-v2-logout>${icon('logout')}Keluar</button>`:`<div class="v2-guest"><strong>Jelajahi Sykabelajar</strong><p>Ikuti lomba dan bangun prestasi.</p>${button('/register','Daftar Gratis')}${button('/login','Masuk','outline')}</div>`}</div></aside>`;
+    const rail=`<aside class="v2-rail"><div class="v2-rail-card"><div class="v2-search">${icon('search')}<input placeholder="Cari lomba, pengguna..." /></div></div><div class="v2-rail-card"><div class="v2-rail-title">${icon('spark')} Trending</div><button class="v2-trend" data-v2-route="/lomba"><b>01</b><span><strong>Uji Kompetensi Matematika Nasional 2026</strong><small>Matematika · 2.840 peserta</small></span></button><button class="v2-trend" data-v2-route="/lomba"><b>02</b><span><strong>Karya Tulis Ilmiah Sains Muda 2026</strong><small>Sains · 1.120 peserta</small></span></button></div><div class="v2-rail-card"><div class="v2-rail-title">${icon('chart')} Top Peringkat</div>${['Mira Cendekia','Bagaskara Wibawa','Larasati Ayu','Dimas Pratama','Naila Zahra'].map((n,i)=>`<div class="v2-rank-row"><span>${i+1}</span><span class="v2-mini-avatar">${n.slice(0,2)}</span><strong>${n}</strong><em>${[9100,8450,7320,6810,6200][i]}</em></div>`).join('')}</div></aside>`;
+    const bottom=`<nav class="v2-bottom">${items.slice(0,4).map(([rr,i,t])=>`<button data-v2-route="${rr}">${icon(i)}<span>${t}</span></button>`).join('')}</nav>`;
+    return `<div class="v2-app"><header class="v2-mobile-top">${brand()}<button class="v2-icon" data-v2-theme>${theme()==='dark'?icon('sun'):icon('moon')}</button></header><div class="v2-shell-grid">${sidebar}<main class="v2-main"><div class="v2-topbar"><span>${current.replace('/','')||'Beranda'}</span><button class="v2-icon" data-v2-theme>${theme()==='dark'?icon('sun'):icon('moon')}</button></div><div class="v2-main-body">${content}</div></main>${rail}</div>${bottom}</div>`;
   }
 
-  async function competitions() {
-    let items=[]; try { const r=await client().from('competitions').select('*').order('created_at',{ascending:false}).limit(30); items=r.data||[]; } catch (_) {}
-    render(`<section class="sy-v2-section"><h1>Competition Center</h1><p class="sy-v2-muted">Temukan kompetisi yang sedang dibuka.</p><div class="sy-v2-grid">${items.length?items.map(x=>`<article class="sy-v2-card"><h3>${escapeHtml(x.title||x.name||'Kompetisi')}</h3><p class="sy-v2-muted">${escapeHtml(x.description||x.summary||'')}</p><div class="sy-v2-meta"><span class="sy-v2-chip">${escapeHtml(x.status||'published')}</span><button class="sy-v2-btn primary" data-route="/student">Ikuti</button></div></article>`).join(''):'<div class="sy-v2-empty">Belum ada kompetisi yang dapat ditampilkan.</div>'}</div></section>`, {authenticated:!!(await getSession())});
+  async function start(){
+    document.documentElement.dataset.sykabelajar='v2';
+    document.documentElement.dataset.sykaV2Theme=theme();
+    const root=document.getElementById('page-root');if(!root)return;
+    const p=currentRoute();
+    if(p==='/') root.innerHTML=await landing();
+    else if(p==='/login'||p==='/register') root.innerHTML=await authPage(p.slice(1));
+    else if(p==='/student'||p==='/dashboard'||p==='/profile'||p.startsWith('/student/')) root.innerHTML=await shell(await studentContent(),p);
+    else if(p==='/organizer'||p.startsWith('/organizer/')) root.innerHTML=await shell(await genericRoleContent('organizer'),p);
+    else if(p==='/admin'||p.startsWith('/admin/')) root.innerHTML=await shell(await genericRoleContent('admin'),p);
+    else if(p==='/lomba'||p==='/competitions'||p.startsWith('/competition')){
+      let rows=[];try{const q=await supa()?.from('competitions').select('*').order('created_at',{ascending:false}).limit(24);rows=q?.data||[]}catch(_){}
+      if(!rows.length) rows=[{title:'Kompetisi Sykabelajar',category:'Kompetisi'}];
+      root.innerHTML=await shell(`<section class="v2-dashboard"><span class="v2-kicker">COMPETITION</span><h1>Kompetisi Terbaru</h1><p class="v2-muted">Temukan uji kompetensi yang sedang dibuka.</p><div class="v2-comp-grid">${rows.map(c=>`<article class="v2-comp-card"><div class="v2-comp-cover"></div><div class="v2-comp-body"><span class="v2-chip">${esc(c.category||'Kompetisi')}</span><h3>${esc(c.title||c.name||'Kompetisi')}</h3><p>${esc(c.description||'Uji kemampuanmu dan raih prestasi.')}</p><div class="v2-comp-meta"><strong>${Number(c.participants||0).toLocaleString('id-ID')} peserta</strong><button data-v2-route="/student">Ikuti</button></div></div></article>`).join('')}</div></section>`,p);
+    } else root.innerHTML=await shell(`<section class="v2-dashboard"><span class="v2-kicker">SYKABELAJAR V2</span><h1>Halaman siap dikembangkan</h1><p class="v2-muted">Route ini tetap berjalan pada V2 shell.</p></section>`,p);
+    bind();
   }
 
-  async function organizer() {
-    const session=await getSession(); if(!session)return navigate('/login'); const role=await getRole(session.user.id); if(!['organizer','admin'].includes(role))return navigate('/student');
-    let competitions=[]; try { const r=await client().from('competitions').select('*').limit(20); competitions=r.data||[]; } catch (_) {}
-    render(`<section class="sy-v2-dashboard"><h1>Organizer Workspace</h1><p class="sy-v2-muted">Kelola event kompetisi dan peserta.</p><div class="sy-v2-statgrid"><div class="sy-v2-stat"><small>Competition</small><strong>${competitions.length}</strong></div><div class="sy-v2-stat"><small>Role</small><strong>${role}</strong></div></div><div class="sy-v2-grid"><article class="sy-v2-card"><h3>Competition Builder</h3><p class="sy-v2-muted">Konfigurasi kompetisi baru.</p><button class="sy-v2-btn primary" data-route="/organizer/competition-builder">Buka Builder</button></article><article class="sy-v2-card"><h3>Participants</h3><p class="sy-v2-muted">Kelola peserta kompetisi.</p></article><article class="sy-v2-card"><h3>Question Bank</h3><p class="sy-v2-muted">Siapkan bank soal.</p></article></div></section>`, {authenticated:true});
-  }
-
-  async function organizerBuilder() {
-    const session=await getSession(); if(!session)return navigate('/login');
-    render(`<section class="sy-v2-form"><h1>Competition Builder</h1><p class="sy-v2-muted">Buat konfigurasi dasar kompetisi.</p><div id="v2-builder-feedback"></div><form id="v2-builder"><div class="sy-v2-field"><label>Nama Kompetisi</label><input id="cb-title" required></div><div class="sy-v2-field"><label>Deskripsi</label><textarea id="cb-description"></textarea></div><div class="sy-v2-field"><label>Status</label><select id="cb-status"><option value="draft">draft</option><option value="published">published</option></select></div><button class="sy-v2-btn primary">Simpan</button></form></section>`, {authenticated:true});
-    document.getElementById('v2-builder')?.addEventListener('submit',async(e)=>{e.preventDefault();const f=document.getElementById('v2-builder-feedback');try{const payload={title:document.getElementById('cb-title').value.trim(),description:document.getElementById('cb-description').value.trim(),status:document.getElementById('cb-status').value};const r=await client().from('competitions').insert(payload).select().single();if(r.error)throw r.error;f.innerHTML='<div class="sy-v2-success">Kompetisi berhasil dibuat.</div>';e.currentTarget.reset();}catch(err){f.innerHTML=`<div class="sy-v2-error">${escapeHtml(err.message||'Gagal menyimpan kompetisi.')}</div>`;}});
-  }
-
-  async function admin() {
-    const session=await getSession(); if(!session)return navigate('/login'); const role=await getRole(session.user.id); if(role!=='admin')return navigate('/student');
-    let users=0, logs=0, flags=[]; try { const c=client(); const [u,l,f]=await Promise.all([c.from('profiles').select('id',{count:'exact',head:true}),c.from('audit_logs').select('id',{count:'exact',head:true}),c.from('feature_flags').select('*')]); users=u.count||0; logs=l.count||0; flags=f.data||[]; } catch (_) {}
-    render(`<section class="sy-v2-dashboard"><h1>Admin Control Center</h1><p class="sy-v2-muted">Kelola pengguna, konfigurasi, dan audit platform.</p><div class="sy-v2-statgrid"><div class="sy-v2-stat"><small>Total Users</small><strong>${users}</strong></div><div class="sy-v2-stat"><small>Audit Logs</small><strong>${logs}</strong></div><div class="sy-v2-stat"><small>Feature Flags</small><strong>${flags.length}</strong></div><div class="sy-v2-stat"><small>Role</small><strong>admin</strong></div></div><section class="sy-v2-section"><h2>Feature Flags</h2><div class="sy-v2-grid">${flags.length?flags.map(x=>`<article class="sy-v2-card"><h3>${escapeHtml(x.name||x.key||'Feature')}</h3><p class="sy-v2-muted">${escapeHtml(String(x.enabled ?? x.status ?? 'unknown'))}</p></article>`).join(''):'<div class="sy-v2-empty">Belum ada feature flag.</div>'}</div></section></section>`, {authenticated:true});
-  }
-
-  async function renderCurrent() {
-    const route=routePath();
-    if(!isV2Route(route)) { window.__SYKA_V2_ACTIVE__=false; return window.__SYKA_LEGACY_APP_INIT__?.(); }
-    window.__SYKA_V2_ACTIVE__=true;
-    try {
-      const root=ensureRoot(); if(!root)return;
-      root.innerHTML='<div class="sy-v2-loading">Memuat Sykabelajar V2…</div>';
-      if(route==='/'||route==='/home') return landing();
-      if(route==='/login') return auth('login');
-      if(route==='/register') return auth('register');
-      if(route==='/student'||route==='/dashboard'||route==='/profile'||route.startsWith('/student/')) return student();
-      if(route==='/competitions'||route.startsWith('/competition/')) return competitions();
-      if(route==='/organizer/competition-builder') return organizerBuilder();
-      if(route==='/organizer'||route.startsWith('/organizer/')) return organizer();
-      if(route==='/admin'||route.startsWith('/admin/')) return admin();
-      return navigate('/');
-    } catch (error) { const root=ensureRoot(); if(root)root.innerHTML=`<div class="sy-v2-container sy-v2-error"><h2>Gagal memuat V2</h2><p>${escapeHtml(error.message||'Terjadi kesalahan.')}</p><button class="sy-v2-btn primary" data-route="/">Kembali</button></div>`; bind(); }
-  }
-
-  async function start() {
-    if (!window.__SYKA_V2_EVENTS_BOUND__) {
-      window.__SYKA_V2_EVENTS_BOUND__ = true;
-      window.addEventListener('popstate', renderCurrent);
-    }
-    return renderCurrent();
-  }
-
-  window.SYKA_V2_RUNTIME = { start, render:renderCurrent, navigate, isV2Route };
-}());
+  window.addEventListener('popstate',start);
+  window.SYKA_V2_RUNTIME={start};
+})();
