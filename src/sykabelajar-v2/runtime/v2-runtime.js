@@ -36,10 +36,49 @@
   function button(route,label,cls='primary'){return `<button class="v2-btn ${cls}" data-v2-route="${route}">${label}</button>`}
   function brand(){return `<button class="v2-brand" data-v2-route="/"><span class="v2-brand-mark">${icon('trophy')}</span><span>sykabelajar<span class="v2-brand-accent">.id</span></span></button>`}
 
+  async function handleAuthSubmit(form){
+    const feedback=document.getElementById('v2-auth-feedback');
+    const email=document.getElementById('v2-email')?.value?.trim();
+    const password=document.getElementById('v2-password')?.value||'';
+    if(!email||!password)return;
+    const submit=form.querySelector('button[type=submit]');
+    if(submit)submit.disabled=true;
+    try{
+      if(form.dataset.mode==='register'){
+        const payload={email,password,fullName:document.getElementById('v2-name')?.value?.trim()||'',username:document.getElementById('v2-username')?.value?.trim()||'',accountType:document.querySelector('[data-account-type].active')?.dataset.accountType||'student'};
+        if(auth()?.signUp){
+          await auth().signUp(payload);
+        }else if(auth()?.register){
+          await auth().register(payload);
+        }else{
+          throw new Error('Register service tidak tersedia pada frontend existing.');
+        }
+        if(feedback)feedback.innerHTML='<div class="v2-success">Akun berhasil dibuat. Silakan cek email jika verifikasi diperlukan.</div>';
+      }else{
+        if(!auth()?.signIn)throw new Error('Login service tidak tersedia pada frontend existing.');
+        await auth().signIn({email,password});
+        navigate('/student');
+        return;
+      }
+    }catch(err){
+      if(feedback)feedback.innerHTML='<div class="v2-error">'+esc(err?.message||'Autentikasi gagal.')+'</div>';
+    }finally{
+      if(submit)submit.disabled=false;
+    }
+  }
+
   function bind(){
     document.querySelectorAll('[data-v2-route]').forEach(el=>el.onclick=()=>navigate(el.dataset.v2Route));
     document.querySelectorAll('[data-v2-theme]').forEach(el=>el.onclick=toggleTheme);
     document.querySelectorAll('[data-v2-logout]').forEach(el=>el.onclick=async()=>{try{await auth()?.signOut?.()}catch(_){}navigate('/')});
+    const form=document.getElementById('v2-auth-form');
+    if(form){
+      form.addEventListener('submit',e=>{e.preventDefault();handleAuthSubmit(form)});
+    }
+    document.querySelectorAll('[data-account-type]').forEach(el=>el.addEventListener('click',()=>{
+      document.querySelectorAll('[data-account-type]').forEach(x=>x.classList.remove('active'));
+      el.classList.add('active');
+    }));
   }
 
   async function landing(){
@@ -65,7 +104,7 @@
 
   async function authPage(mode){
     const reg=mode==='register';
-    return `<section class="v2-auth"><div class="v2-auth-card">${brand()}<span class="v2-kicker">SYKABELAJAR</span><h1>${reg?'Buat akun baru':'Selamat datang kembali'}</h1><p>${reg?'Mulai perjalanan belajar dan kompetisimu.':'Masuk untuk melanjutkan progresmu.'}</p><form id="v2-auth-form">${reg?'<label>Nama lengkap<input id="v2-name" required></label><label>Username<input id="v2-username" required></label>':''}<label>Email<input id="v2-email" type="email" required></label><label>Password<input id="v2-password" type="password" minlength="8" required></label><button class="v2-btn primary big full" type="submit">${reg?'Buat akun':'Masuk'}</button></form><div id="v2-auth-feedback"></div><p class="v2-switch">${reg?'Sudah punya akun?':'Belum punya akun?'} <button data-v2-route="/${reg?'login':'register'}">${reg?'Masuk':'Daftar'}</button></p></div></section>`;
+    return `<section class="v2-auth"><div class="v2-auth-card">${brand()}<span class="v2-kicker">SYKABELAJAR</span><h1>${reg?'Buat akun baru':'Selamat datang kembali'}</h1><p>${reg?'Mulai perjalanan belajar dan kompetisimu.':'Masuk untuk melanjutkan progresmu.'}</p><form id="v2-auth-form" data-mode="${reg?"register":"login"}">${reg?'<div class="v2-account-tabs"><button type="button" class="active" data-account-type="student">Pelajar</button><button type="button" data-account-type="organizer">Organizer</button></div><label>Nama lengkap<input id="v2-name" required></label><label>Username<input id="v2-username" required></label>':''}<label>Email<input id="v2-email" type="email" required></label><label>Password<input id="v2-password" type="password" minlength="8" required></label><button class="v2-btn primary big full" type="submit">${reg?'Buat akun':'Masuk'}</button></form><div id="v2-auth-feedback"></div><p class="v2-switch">${reg?'Sudah punya akun?':'Belum punya akun?'} <button data-v2-route="/${reg?'login':'register'}">${reg?'Masuk':'Daftar'}</button></p></div></section>`;
   }
 
   async function studentContent(){
