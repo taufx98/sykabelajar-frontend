@@ -3,12 +3,12 @@
   "version": "4.16.0-bolt-polished",
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.7ec9fe2e2bdd.min.js",
+  "app": "app.0197355b3177.min.js",
   "styles": "styles.c60daf09b09d.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "9b302188874a3499c475244815abf870a4b4fb88",
-  "generatedAt": "2026-08-27T03:24:26+07:00",
+  "commit": "ca5b721222f73b8784f5fac442a3ee3e9d46334d",
+  "generatedAt": "2026-08-27T03:38:26+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
