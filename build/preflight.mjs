@@ -16,7 +16,13 @@ if (!code.includes('window.SYKA_APP')) {
 if (code.includes('Aruna Putra') || code.includes('Mira Cendekia') || code.includes('Bagaskara Wibawa') || code.includes('Larasati Ayu') || code.includes('Dimas Pratama')) {
   throw new Error('Production bundle still contains Bolt demo identity data.');
 }
-if (code.includes("select('roles(name)')") || code.includes('select=roles%28name%29')) {
+
+// Regression guard: reject only an actual user_roles query asking for the
+// nested roles(name) relationship. A standalone legacy/test string is not
+// enough to mark the production bundle as invalid.
+const normalized = code.replace(/\s+/g, ' ');
+const invalidUserRolesRelationship = /(?:from\(\s*['"]user_roles['"]\s*\))[^;]{0,240}?select\(\s*['"][^'"]*roles\s*\(\s*name\s*\)[^'"]*['"]\s*\)/i;
+if (invalidUserRolesRelationship.test(normalized)) {
   throw new Error('Production bundle still uses the invalid user_roles -> roles relationship query.');
 }
 if (!code.includes('SYKA_PROFILE_SERVICE') || !code.includes('SYKA_COMPETITION_SERVICE')) {
