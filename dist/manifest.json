@@ -7,8 +7,8 @@
   "styles": "styles.c60daf09b09d.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "2b51a324ebf526d7692055ea4bb2a33aed7e5efd",
-  "generatedAt": "2026-08-27T02:43:10+07:00",
+  "commit": "dd44eeb97d993ff2917ec58e002bb45dfa929f59",
+  "generatedAt": "2026-08-27T02:43:36+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
