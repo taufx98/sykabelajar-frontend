@@ -9,13 +9,14 @@ export async function initializeUserSession(supabase, user) {
     };
   }
 
-  const legacyAuth = window.SYKA_STATE?.getState?.()?.auth;
-  const profile = legacyAuth?.profile || await getProfile(supabase, user.id);
-  const roles = legacyAuth?.roles || [];
+  const profile = await getProfile(
+    supabase,
+    user.id
+  );
 
   return {
     authenticated: true,
-    role: roles.includes("admin") ? "admin" : roles.includes("organizer") ? "organizer" : profile?.role || "student",
+    role: profile?.role || "student",
     profile
   };
 }

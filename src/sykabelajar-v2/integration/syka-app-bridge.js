@@ -1,14 +1,8 @@
-import { startSykabelajarV2 } from "../bootstrap.js";
-
-/**
- * Bridge between existing loader runtime and Sykabelajar V2.
- *
- * Blogger loader expects window.SYKA_APP.init().
- * This bridge keeps the existing deployment architecture intact.
- */
-
-window.SYKA_APP = {
-  async init() {
-    return startSykabelajarV2();
-  }
-};
+(function () {
+  window.SYKA_APP = {
+    async init() {
+      document.documentElement.dataset.sykabelajar = 'v2';
+      return window.SYKA_V2_BOOTSTRAP();
+    }
+  };
+}());

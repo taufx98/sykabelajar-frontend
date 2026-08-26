@@ -1,32 +1,14 @@
-import { startRouter } from "./router/index.js";
-import { initializeV2Core } from "./core/index.js";
-import { getV2AuthState } from "./integration/auth-bridge.js";
-import { getV2StudentDashboard } from "./integration/student-bridge.js";
+(function () {
+  if (window.__SYKA_V2_BOOTSTRAP__) return;
+  window.__SYKA_V2_BOOTSTRAP__ = true;
 
-/**
- * Sykabelajar V2 Runtime Bootstrap
- *
- * Entry point for the new frontend architecture.
- * This file intentionally does not replace legacy modules yet.
- * It activates V2 gradually through the existing SYKA_APP loader.
- */
+  const legacyInit = window.SYKA_APP?.init;
+  window.__SYKA_LEGACY_APP_INIT__ = legacyInit || null;
 
-export async function startSykabelajarV2(options = {}) {
-  const core = await initializeV2Core(options);
-  const auth = await getV2AuthState();
-  const student = auth.authenticated ? await getV2StudentDashboard() : null;
-  const router = startRouter(options);
-
-  window.SYKA_V2_STUDENT = { getDashboard: getV2StudentDashboard };
-
-  document.documentElement.dataset.sykabelajar = "v2";
-
-  return {
-    version: "2.0",
-    status: "initialized",
-    core,
-    auth,
-    student,
-    router
+  window.SYKA_V2_BOOTSTRAP = async function () {
+    if (window.SYKA_V2_RUNTIME?.start) {
+      return window.SYKA_V2_RUNTIME.start();
+    }
+    throw new Error('Sykabelajar V2 runtime belum dimuat.');
   };
-}
+}());
