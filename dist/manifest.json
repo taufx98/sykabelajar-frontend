@@ -3,12 +3,12 @@
   "version": "4.19.0-bolt-ui-component-modal-polish",
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.ea37b19416e4.min.js",
+  "app": "app.9099ef8e578a.min.js",
   "styles": "styles.c60daf09b09d.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "a61444b4c01e19b9801baae8ca494f3d22303caf",
-  "generatedAt": "2026-08-27T04:07:47+07:00",
+  "commit": "d20f0e6af6804fae6e35f6e56a3c4fb183bf80a1",
+  "generatedAt": "2026-08-27T04:16:22+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
