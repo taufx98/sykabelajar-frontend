@@ -172,6 +172,64 @@
     return `<div class="v2-app"><header class="v2-mobile-top">${brand()}<button class="v2-icon" data-v2-theme>${theme()==='dark'?icon('sun'):icon('moon')}</button></header><div class="v2-shell-grid">${sidebar}<main class="v2-main"><div class="v2-topbar"><span>${current.replace('/','')||'Beranda'}</span><button class="v2-icon" data-v2-theme>${theme()==='dark'?icon('sun'):icon('moon')}</button></div><div class="v2-main-body">${content}</div></main>${rail}</div>${bottom}</div>`;
   }
 
+
+  async function competitionDetail(id){
+    const s=await getSession();
+    if(!s){navigate('/login');return ''}
+    let comp=null,registration=null,attempts=[];
+    try{
+      const c=supa();
+      const [co,rg,at]=await Promise.all([
+        c.from('competitions').select('*').eq('id',id).single(),
+        c.from('registrations').select('*').eq('competition_id',id).eq('user_id',s.user.id).maybeSingle(),
+        c.from('attempts').select('*').eq('competition_id',id).eq('user_id',s.user.id).order('created_at',{ascending:false})
+      ]);
+      comp=co?.data;registration=rg?.data;attempts=at?.data||[];
+    }catch(_){}
+    if(!comp)return `<section class="v2-dashboard"><span class="v2-kicker">COMPETITION</span><h1>Kompetisi tidak ditemukan</h1><p class="v2-muted">Data kompetisi belum tersedia.</p>${button('/lomba','Kembali','outline')}</section>`;
+    return `<section class="v2-dashboard"><span class="v2-kicker">${esc(comp.category||'COMPETITION')}</span><h1>${esc(comp.title||comp.name||'Kompetisi')}</h1><p class="v2-muted">${esc(comp.description||'Ikuti kompetisi dan raih prestasi.')}</p><div class="v2-stat-grid"><div><small>Status</small><strong>${esc(comp.status||'published')}</strong></div><div><small>Peserta</small><strong>${Number(comp.participants||0).toLocaleString('id-ID')}</strong></div><div><small>Poin</small><strong>${Number(comp.points||300)}</strong></div><div><small>Attempt</small><strong>${attempts.length}</strong></div></div><div class="v2-panel-grid"><article class="v2-panel"><div class="v2-panel-icon">${icon('trophy')}</div><h3>Registrasi</h3><p>${registration?'Kamu sudah terdaftar.':'Daftarkan dirimu ke kompetisi ini.'}</p><button class="v2-btn ${registration?'outline':'primary'}" data-v2-register="${esc(id)}">${registration?'Terdaftar':'Daftar Sekarang'}</button></article><article class="v2-panel"><div class="v2-panel-icon">${icon('chart')}</div><h3>Attempt</h3><p>${attempts.length?'Ada attempt yang tercatat.':'Belum ada attempt.'}</p><button class="v2-btn outline" data-v2-attempt="${esc(id)}">Mulai / Lanjutkan</button></article><article class="v2-panel"><div class="v2-panel-icon">${icon('award')}</div><h3>Hasil & Sertifikat</h3><p>Hasil akhir dan sertifikat akan mengikuti workflow existing.</p>${button('/prestasi','Lihat prestasi','outline')}</article></div></section>`;
+  }
+
+  async function registerForCompetition(id){
+    const s=await getSession(); if(!s){navigate('/login');return}
+    try{
+      const q=await supa().from('registrations').insert({competition_id:id,user_id:s.user.id});
+      if(q?.error) throw q.error;
+    }catch(e){window.alert(e?.message||'Registrasi gagal.')}
+    navigate('/competition/'+encodeURIComponent(id));
+  }
+
+  async function startAttempt(id){
+    const s=await getSession(); if(!s){navigate('/login');return}
+    try{
+      const q=await supa().from('attempts').insert({competition_id:id,user_id:s.user.id,status:'in_progress'}).select().single();
+      if(q?.error) throw q.error;
+      const attemptId=q?.data?.id;
+      if(attemptId)navigate('/attempt/'+encodeURIComponent(attemptId));
+    }catch(e){window.alert(e?.message||'Attempt tidak dapat dimulai.')}
+  }
+
+  async function attemptPage(id){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let attempt=null,answers=[];
+    try{
+      const c=supa();
+      const [a,an]=await Promise.all([
+        c.from('attempts').select('*').eq('id',id).eq('user_id',s.user.id).single(),
+        c.from('answers').select('*').eq('attempt_id',id)
+      ]);
+      attempt=a?.data;answers=an?.data||[];
+    }catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">ATTEMPT</span><h1>${esc(attempt?.title||'Uji Kompetensi')}</h1><p class="v2-muted">Jawaban tersimpan melalui service backend existing.</p><div class="v2-stat-grid"><div><small>Status</small><strong>${esc(attempt?.status||'in_progress')}</strong></div><div><small>Jawaban</small><strong>${answers.length}</strong></div><div><small>Attempt</small><strong>${esc(String(id).slice(0,8))}</strong></div><div><small>Grading</small><strong>Existing engine</strong></div></div><div class="v2-panel"><h3>Exam Engine</h3><p>Question engine tetap memakai tabel questions, question_options, answers, dan grading_items yang sudah tersedia.</p></div></section>`;
+  }
+
+  async function community(){
+    const s=await getSession(); if(!s){navigate('/login');return ''}
+    let posts=[];
+    try{const q=await supa()?.from('posts').select('*').order('created_at',{ascending:false}).limit(12);posts=q?.data||[]}catch(_){}
+    return `<section class="v2-dashboard"><span class="v2-kicker">COMMUNITY</span><h1>Community Feed</h1><p class="v2-muted">Diskusi dan aktivitas komunitas.</p>${posts.length?`<div class="v2-feed">${posts.map(p=>`<article class="v2-post"><div class="v2-post-head"><span class="v2-avatar">${esc((p.author_name||p.user_name||'U').slice(0,1).toUpperCase())}</span><div><strong>${esc(p.author_name||p.user_name||'Pengguna')}</strong><small>${esc(p.created_at||'')}</small></div></div><p>${esc(p.content||p.body||p.text||'')}</p><div class="v2-post-actions"><button type="button">Like</button><button type="button">Komentar</button><button type="button">Bagikan</button></div></article>`).join('')}</div>`:'<div class="v2-empty-panel">Belum ada posting terbaru.</div>'}</section>`;
+  }
+
   async function start(){
     document.documentElement.dataset.sykabelajar='v2';
     document.documentElement.dataset.sykaV2Theme=theme();
@@ -184,6 +242,9 @@
     else if(p==='/student'||p==='/dashboard'||p==='/profile'||p.startsWith('/student/')) root.innerHTML=await shell(await studentContent(),p);
     else if(p==='/organizer'||p.startsWith('/organizer/')) root.innerHTML=await shell(await genericRoleContent('organizer'),p);
     else if(p==='/admin'||p.startsWith('/admin/')) root.innerHTML=await shell(await genericRoleContent('admin'),p);
+    else if(p.startsWith('/competition/')){ const id=decodeURIComponent(p.split('/')[2]||''); root.innerHTML=await shell(await competitionDetail(id),p); }
+    else if(p.startsWith('/attempt/')){ const id=decodeURIComponent(p.split('/')[2]||''); root.innerHTML=await shell(await attemptPage(id),p); }
+    else if(p==='/community'){ root.innerHTML=await shell(await community(),p); }
     else if(p==='/lomba'||p==='/competitions'||p.startsWith('/competition')){
       let rows=[];try{const q=await supa()?.from('competitions').select('*').order('created_at',{ascending:false}).limit(24);rows=q?.data||[]}catch(_){}
       if(!rows.length) rows=[{title:'Kompetisi Sykabelajar',category:'Kompetisi'}];
