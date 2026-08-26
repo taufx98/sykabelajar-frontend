@@ -3,12 +3,12 @@
   "version": "4.15.1-bolt-feed",
   "repo": "taufx98/sykabelajar-frontend",
   "base": "https://cdn.jsdelivr.net/gh/taufx98/sykabelajar-frontend@main/dist",
-  "app": "app.da7038a9fa4d.min.js",
+  "app": "app.c30ee6a81931.min.js",
   "styles": "styles.c60daf09b09d.min.css",
   "vendor": "vendor.f08bf120942a.min.js",
   "loader": "loader.js",
-  "commit": "9b508de4da815333800a7bd4445bef265cebe7f0",
-  "generatedAt": "2026-08-27T03:12:39+07:00",
+  "commit": "be58adf6b222f22ae9e7ab4a675b870f35760583",
+  "generatedAt": "2026-08-27T03:13:18+07:00",
   "buildMode": "source-complete",
   "missingSourceModules": []
 }
