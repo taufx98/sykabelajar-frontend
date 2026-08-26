@@ -37,6 +37,9 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: node build/build.mjs
 
+      - name: Production preflight
+        run: node build/preflight.mjs
+
       - name: Validate release
         shell: bash
         run: |
@@ -145,4 +148,5 @@ jobs:
             echo "- Source-of-truth manifest: https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/dist/manifest.json"
             echo "- Fingerprinted assets are generated from content hashes."
             echo "- loader.js contains no hard-coded asset filenames."
+            echo "- Production preflight validates JS syntax and rejects known Bolt demo identities."
           } >> "$GITHUB_STEP_SUMMARY"
